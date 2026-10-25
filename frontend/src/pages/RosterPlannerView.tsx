@@ -41,12 +41,16 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualViolations, setManualViolations] = useState<RuleViolation[]>([]);
 
-  const captains = crewList.filter((c) => c.role === 'CAPTAIN' && c.is_active);
-  const firstOfficers = crewList.filter((c) => c.role === 'FIRST_OFFICER' && c.is_active);
-  const cabinCrew = crewList.filter((c) => c.role === 'CABIN_CREW' && c.is_active);
-  const activeAircraft = aircraftList.filter((a) => a.is_active);
+  const safeCrewList = Array.isArray(crewList) ? crewList : (crewList as any)?.crew || [];
+  const safeAircraftList = Array.isArray(aircraftList) ? aircraftList : (aircraftList as any)?.aircraft || [];
+  const safeFlights = Array.isArray(flights) ? flights : (flights as any)?.flights || [];
 
-  const filteredFlights = flights.filter((f) => {
+  const captains = safeCrewList.filter((c: CrewMember) => c.role === 'CAPTAIN' && c.is_active);
+  const firstOfficers = safeCrewList.filter((c: CrewMember) => c.role === 'FIRST_OFFICER' && c.is_active);
+  const cabinCrew = safeCrewList.filter((c: CrewMember) => c.role === 'CABIN_CREW' && c.is_active);
+  const activeAircraft = safeAircraftList.filter((a: Aircraft) => a.is_active);
+
+  const filteredFlights = safeFlights.filter((f: FlightLeg) => {
     const isCovered = f.is_covered ?? (!!f.captain_id && !!f.first_officer_id);
     if (filterMode === 'ASSIGNED') return isCovered;
     if (filterMode === 'UNASSIGNED') return !isCovered;
@@ -63,7 +67,7 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
     setManualModalFlight(flight);
     setSelectedCaptain(flight.captain_id || (captains[0]?.id || ''));
     setSelectedFO(flight.first_officer_id || (firstOfficers[0]?.id || ''));
-    setSelectedCabin(flight.cabin_crew_ids && flight.cabin_crew_ids.length > 0 ? flight.cabin_crew_ids : (cabinCrew.slice(0, 2).map(c => c.id)));
+    setSelectedCabin(flight.cabin_crew_ids && flight.cabin_crew_ids.length > 0 ? flight.cabin_crew_ids : (cabinCrew.slice(0, 2).map((c: CrewMember) => c.id)));
     setSelectedTail(flight.aircraft_tail || (activeAircraft[0]?.tail_number || ''));
     setManualError(null);
     setManualViolations([]);
@@ -130,8 +134,8 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
               onClick={() => setFilterMode(mode)}
               className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition ${
                 filterMode === mode
-                  ? 'bg-cyan-600 text-white font-bold'
-                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                  ? 'bg-sky-600 text-white font-bold shadow-xs'
+                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 dark:hover:text-white'
               }`}
             >
               {mode} ({flights.filter((f) => {
@@ -145,7 +149,7 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
 
       {/* Pairing Cards / Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        {filteredFlights.map((flight) => {
+        {filteredFlights.map((flight: FlightLeg) => {
           const isCovered = flight.is_covered ?? (!!flight.captain_id && !!flight.first_officer_id);
 
           return (
@@ -248,9 +252,9 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
               <div className="pt-1 flex items-center justify-end">
                 <button
                   onClick={() => handleOpenManualModal(flight)}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition flex items-center gap-1"
+                  className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition flex items-center gap-1.5 shadow-2xs"
                 >
-                  <Users className="w-3 h-3 text-cyan-400" />
+                  <Users className="w-3.5 h-3.5 text-sky-600 dark:text-cyan-400" />
                   <span>Manual Assign</span>
                 </button>
               </div>
@@ -367,7 +371,7 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
                   required
                 >
                   <option value="">Select Aircraft</option>
-                  {activeAircraft.map((a) => (
+                  {activeAircraft.map((a: Aircraft) => (
                     <option key={a.tail_number} value={a.tail_number}>
                       {a.tail_number} ({a.aircraft_type} — Base: {a.home_base})
                     </option>
@@ -385,7 +389,7 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
                   required
                 >
                   <option value="">Select Captain</option>
-                  {captains.map((c) => (
+                  {captains.map((c: CrewMember) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.id} — Base: {c.home_base})
                     </option>
@@ -403,7 +407,7 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
                   required
                 >
                   <option value="">Select First Officer</option>
-                  {firstOfficers.map((c) => (
+                  {firstOfficers.map((c: CrewMember) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.id} — Base: {c.home_base})
                     </option>
@@ -417,7 +421,7 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
                   Cabin Crew ({selectedCabin.length} selected):
                 </label>
                 <div className="max-h-24 overflow-y-auto p-2 rounded bg-slate-950 border border-slate-800 grid grid-cols-2 gap-1.5">
-                  {cabinCrew.map((c) => (
+                  {cabinCrew.map((c: CrewMember) => (
                     <label key={c.id} className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer">
                       <input
                         type="checkbox"
@@ -451,18 +455,18 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setManualModalFlight(null)}
-                  className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 hover:text-white"
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingManual}
-                  className="px-4 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition"
+                  className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-xs transition"
                 >
                   {isSubmittingManual ? 'Validating Rules...' : 'Submit Assignment'}
                 </button>

@@ -45,29 +45,34 @@ export const DisruptionSimulatorView: React.FC<DisruptionSimulatorViewProps> = (
 
   const handleRunPreset = async (preset: DisruptionPreset) => {
     setIsExecuting(true);
-    setActiveScenarioName(preset.title);
+    const title = preset.title || (preset as any).name || preset.scenario_type;
+    setActiveScenarioName(title);
     setErrorText(null);
     setExecutionResult(null);
 
     try {
+      const defParams = (preset as any).default_params || {};
+      const targetId = preset.target_id || defParams.pilot_id || defParams.tail_number || defParams.flight_number || 'NV-101';
+
       let payload: any = {
+        scenario: (preset as any).scenario || preset.scenario_type,
         scenario_type: preset.scenario_type,
       };
 
       if (preset.scenario_type === 'PILOT_SICK') {
-        payload.crew_id = preset.target_id;
-        payload.flight_number = 'NV-101';
+        payload.crew_id = targetId || 'CRW-CPT-01';
+        payload.flight_number = defParams.flight_number || 'NV-101';
       } else if (preset.scenario_type === 'AIRCRAFT_AOG') {
-        payload.aircraft_tail = preset.target_id;
-        payload.flight_number = 'NV-101';
+        payload.aircraft_tail = targetId || 'VT-NVA';
+        payload.flight_number = defParams.flight_number || 'NV-101';
       } else if (preset.scenario_type === 'FLIGHT_DELAY_CASCADE') {
-        payload.flight_number = preset.target_id;
-        payload.delay_minutes = preset.delay_minutes || 75;
+        payload.flight_number = targetId || 'NV-101';
+        payload.delay_minutes = preset.delay_minutes || defParams.delay_minutes || 75;
       } else if (preset.scenario_type === 'NO_LEGAL_SOLUTION') {
-        payload.flight_number = preset.target_id;
+        payload.flight_number = targetId || 'NV-105';
       } else if (preset.scenario_type === 'INVALID_MANUAL_OVERRIDE') {
-        payload.flight_number = preset.target_id;
-        payload.override_captain_id = 'CR-009'; // Unqualified for A320
+        payload.flight_number = targetId || 'NV-101';
+        payload.override_captain_id = defParams.captain_id || 'CRW-FO-01'; // First Officer without command type rating
       }
 
       const res = await api.executeDisruption(payload);
@@ -126,7 +131,11 @@ export const DisruptionSimulatorView: React.FC<DisruptionSimulatorViewProps> = (
       {/* Preset Cards Grid (Scenarios A through E) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {presets.map((p, idx) => {
-          const letter = String.fromCharCode(65 + idx);
+          const letter = (p as any).scenario || String.fromCharCode(65 + idx);
+          const cardTitle = p.title || (p as any).name || `Scenario ${letter}`;
+          const target = p.target_id || (p as any).default_params?.pilot_id || (p as any).default_params?.tail_number || (p as any).default_params?.flight_number || 'NV-101';
+          const objective = p.academic_objective || p.description;
+
           return (
             <div
               key={p.scenario_type}
@@ -137,25 +146,25 @@ export const DisruptionSimulatorView: React.FC<DisruptionSimulatorViewProps> = (
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60">
                     SCENARIO {letter}
                   </span>
-                  <span className="text-[10px] font-mono text-slate-500">
-                    Target: {p.target_id}
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Target: <strong className="text-cyan-300">{target}</strong>
                   </span>
                 </div>
-                <div className="text-sm font-bold text-white font-sans">{p.title}</div>
+                <div className="text-sm font-bold text-white font-sans">{cardTitle}</div>
                 <div className="text-xs text-slate-300 font-sans">{p.description}</div>
                 <div className="text-[11px] text-slate-400 font-mono bg-slate-950 p-2 rounded border border-slate-800/80">
-                  Objective: {p.academic_objective}
+                  Objective: {objective}
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-[10px] font-mono text-slate-500">{p.scenario_type}</span>
                 <button
                   onClick={() => handleRunPreset(p)}
                   disabled={isExecuting}
-                  className="px-3 py-1 rounded bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+                  className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 active:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shadow-xs"
                 >
-                  <Play className={`w-3.5 h-3.5 ${isExecuting && activeScenarioName === p.title ? 'animate-spin' : ''}`} />
+                  <Play className={`w-3.5 h-3.5 ${isExecuting && activeScenarioName === cardTitle ? 'animate-spin' : ''}`} />
                   <span>Execute Preset</span>
                 </button>
               </div>
@@ -321,7 +330,7 @@ export const DisruptionSimulatorView: React.FC<DisruptionSimulatorViewProps> = (
             <button
               type="submit"
               disabled={isExecuting}
-              className="w-full p-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-semibold transition"
+              className="w-full py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 disabled:opacity-50 text-white font-semibold text-xs transition shadow-xs"
             >
               {isExecuting ? 'Injecting...' : 'Inject Disruption'}
             </button>

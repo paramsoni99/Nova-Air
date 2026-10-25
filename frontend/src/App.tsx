@@ -29,6 +29,28 @@ export default function App(): React.ReactElement {
   const [aircraftList, setAircraftList] = useState<Aircraft[]>([]);
   const [btreeTelemetry, setBtreeTelemetry] = useState<BTreeRangeTelemetry | null>(null);
 
+  // Theme state: defaults to 'light' (clean white OCC theme) with localStorage persistence
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('aircrewops_theme');
+    return saved === 'dark' || saved === 'light' ? saved : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('aircrewops_theme', theme);
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -51,10 +73,10 @@ export default function App(): React.ReactElement {
         api.getAircraft(),
       ]);
       setSummary(sum);
-      setFlights(fl.flights || []);
-      setBtreeTelemetry(fl.btree_range_telemetry || null);
-      setCrewList(cr || []);
-      setAircraftList(ac || []);
+      setFlights(fl?.flights || []);
+      setBtreeTelemetry(fl?.btree_range_telemetry || fl?.b_tree_telemetry || null);
+      setCrewList(Array.isArray(cr) ? cr : (cr as any)?.crew || []);
+      setAircraftList(Array.isArray(ac) ? ac : (ac as any)?.aircraft || []);
     } catch (err: any) {
       console.error('Failed to load operations data', err);
     } finally {
@@ -82,7 +104,8 @@ export default function App(): React.ReactElement {
     setIsGenerating(true);
     try {
       const res = await api.generateRoster();
-      showNotification(`Roster Generated: ${res.roster_count} assigned legs, ${res.unassigned_count} unassigned.`, 'success');
+      const assignedCount = res.assigned_count ?? res.roster_count ?? 0;
+      showNotification(`Roster Generated: ${assignedCount} assigned legs, ${res.unassigned_count} unassigned.`, 'success');
       await loadData();
     } catch (err: any) {
       showNotification(`Roster Generation Failed: ${err.message}`, 'error');
@@ -154,7 +177,7 @@ export default function App(): React.ReactElement {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-slate-950 text-slate-100'} flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200 transition-colors duration-150`}>
       {/* Global OCC Navigation Header */}
       <Navbar
         currentTab={currentTab}
@@ -168,6 +191,8 @@ export default function App(): React.ReactElement {
         eventCount={events.length}
         onToggleEventsDrawer={() => setIsEventsDrawerOpen(!isEventsDrawerOpen)}
         isEventsDrawerOpen={isEventsDrawerOpen}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* Floating Notification Toast */}

@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -12,7 +13,7 @@ export default {
           card: '#0f172a',
           cardHover: '#1e293b',
           border: '#1e293b',
-          accent: '#06b6d4',
+          accent: '#0284c7',
           highlight: '#38bdf8',
           success: '#10b981',
           warning: '#f59e0b',
@@ -21,7 +22,8 @@ export default {
         }
       },
       fontFamily: {
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       }
     },
   },

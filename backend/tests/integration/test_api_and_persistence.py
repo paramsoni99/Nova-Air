@@ -256,3 +256,119 @@ def test_crew_and_aircraft_endpoints(client):
     assert r_resp.status_code == 200
     assert r_resp.json()["tail_number"] == "VT-NVA"
     assert "intervals" in r_resp.json()
+
+
+def test_issue_a_ads_laboratory_frontend_schema_regression(client):
+    """Verify Issue A regression: frontend ADS Lab request schema with structure and params."""
+    # 1. Exact Issue A payload: flights_by_id lookup
+    payload_a = {
+        "structure": "hash_table",
+        "operation": "lookup",
+        "params": {"key": "NV-101", "entity_type": "flights"},
+    }
+    resp = client.post("/api/v1/ads/laboratory/query", json=payload_a)
+    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["structure"] == "SeparateChainingHashTable"
+    assert data["found"] is True
+    assert "O(1)" in data["time_complexity"]
+    assert "NV-101" in str(data["result"])
+    assert data["telemetry"]["lookup_key"] == "NV-101"
+
+    # 2. B-Tree frontend schema
+    payload_btree = {
+        "structure": "btree",
+        "operation": "range_query",
+        "params": {"start_utc": 1774936800, "end_utc": 1774960000},
+    }
+    resp_btree = client.post("/api/v1/ads/laboratory/query", json=payload_btree)
+    assert resp_btree.status_code == 200
+    b_data = resp_btree.json()
+    assert b_data["structure"] == "FlightScheduleBTree"
+    assert "log" in b_data["time_complexity"]
+    assert b_data["items_count"] > 0
+
+    # 3. Interval tree frontend schema
+    payload_interval = {
+        "structure": "interval_tree",
+        "operation": "overlap_query",
+        "params": {"resource_id": "VT-NVA", "start_utc": 1774936800, "end_utc": 1774990000},
+    }
+    resp_interval = client.post("/api/v1/ads/laboratory/query", json=payload_interval)
+    assert resp_interval.status_code == 200
+    i_data = resp_interval.json()
+    assert i_data["structure"] == "RBIntervalTree"
+    assert "log" in i_data["time_complexity"]
+
+    # 4. Dijkstra graph frontend schema
+    payload_graph = {
+        "structure": "graph",
+        "operation": "dijkstra_path",
+        "params": {"origin": "BOM", "destination": "DEL", "departure_utc": 1774936800},
+    }
+    resp_graph = client.post("/api/v1/ads/laboratory/query", json=payload_graph)
+    assert resp_graph.status_code == 200
+    g_data = resp_graph.json()
+    assert g_data["structure"] == "FlightConnectionGraph"
+    assert "log" in g_data["time_complexity"]
+
+
+def test_issue_c_ads_diagnostics_structured_payload(client):
+    """Verify Issue C regression: structured diagnostics objects for ADS Laboratory."""
+    resp = client.get("/api/v1/ads/diagnostics")
+    assert resp.status_code == 200
+    diag = resp.json()
+
+    # Verify structured sub-objects required by ADSDiagnostics in frontend
+    assert "hash_table" in diag
+    assert diag["hash_table"]["size"] > 0
+    assert diag["hash_table"]["capacity"] > 0
+    assert diag["hash_table"]["load_factor"] > 0
+    assert "collision_count" in diag["hash_table"]
+
+    assert "btree" in diag
+    assert diag["btree"]["keys_count"] > 0
+    assert diag["btree"]["min_degree"] == 3
+
+    assert "interval_tree" in diag
+    assert diag["interval_tree"]["black_height_consistent"] is True
+
+    assert "graph" in diag
+    assert diag["graph"]["airports_count"] > 0
+
+    assert "priority_queue" in diag
+    assert "size" in diag["priority_queue"]
+
+
+def test_flight_patch_delay_minutes_atomic_reschedule(client):
+    """Verify PATCH /api/v1/flights/{flight_id} with delay_minutes shifts times and updates B-Tree."""
+    idx = app.state.index_manager
+    persist = app.state.persistence_service
+
+    fl = persist.get_flight("NV-102")
+    assert fl is not None
+    original_dep = fl.departure_utc
+    original_arr = fl.arrival_utc
+
+    delay_mins = 45
+    resp = client.patch(
+        "/api/v1/flights/NV-102",
+        json={"delay_minutes": delay_mins, "reason": "Weather Delay"},
+    )
+    assert resp.status_code == 200
+    res = resp.json()
+    expected_dep = original_dep + delay_mins * 60
+    expected_arr = original_arr + delay_mins * 60
+    assert res["departure_utc"] == expected_dep
+    assert res["arrival_utc"] == expected_arr
+
+    # Verify B-Tree index key was atomically replaced
+    assert idx.schedule_btree.search((original_dep, "NV-102")) is None
+    assert idx.schedule_btree.search((expected_dep, "NV-102")) is not None
+
+    # Verify SQLite updated
+    sql_fl = persist.get_flight("NV-102")
+    assert sql_fl.departure_utc == expected_dep
+    assert sql_fl.arrival_utc == expected_arr
+
+

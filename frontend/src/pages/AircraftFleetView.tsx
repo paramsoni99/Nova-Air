@@ -39,9 +39,12 @@ export const AircraftFleetView: React.FC<AircraftFleetViewProps> = ({
     return d.toISOString().replace('T', ' ').substring(5, 16) + 'Z';
   };
 
+  const safeAircraftList = Array.isArray(aircraftList) ? aircraftList : (aircraftList as any)?.aircraft || [];
+  const safeFlights = Array.isArray(flights) ? flights : (flights as any)?.flights || [];
+
   // Group flights by assigned tail
   const flightsByTail: Record<string, FlightLeg[]> = {};
-  flights.forEach((f) => {
+  safeFlights.forEach((f: FlightLeg) => {
     if (f.aircraft_tail) {
       if (!flightsByTail[f.aircraft_tail]) flightsByTail[f.aircraft_tail] = [];
       flightsByTail[f.aircraft_tail].push(f);
@@ -70,14 +73,14 @@ export const AircraftFleetView: React.FC<AircraftFleetViewProps> = ({
         <div className="flex items-center gap-2 text-xs font-mono">
           <span className="text-slate-400">Fleet Strength:</span>
           <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-white font-bold">
-            {aircraftList.length} Aircraft ({aircraftList.filter((a) => a.is_active).length} Serviceable)
+            {safeAircraftList.length} Aircraft ({safeAircraftList.filter((a: Aircraft) => a.is_active).length} Serviceable)
           </span>
         </div>
       </div>
 
       {/* Fleet Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {aircraftList.map((ac) => {
+        {safeAircraftList.map((ac: Aircraft) => {
           const tailFlights = flightsByTail[ac.tail_number] || [];
 
           return (
@@ -151,12 +154,12 @@ export const AircraftFleetView: React.FC<AircraftFleetViewProps> = ({
               </div>
 
               {/* Card Footer */}
-              <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
                 <button
                   onClick={() => handleOpenRotation(ac)}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition flex items-center gap-1.5"
+                  className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition flex items-center gap-1.5 shadow-2xs"
                 >
-                  <Plane className="w-3 h-3 text-cyan-400" />
+                  <Plane className="w-3.5 h-3.5 text-sky-600 dark:text-cyan-400" />
                   <span>Inspect Rotation Chain</span>
                 </button>
               </div>

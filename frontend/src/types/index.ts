@@ -110,34 +110,61 @@ export interface UncoveredReason {
   details: Record<string, any>;
 }
 
+export interface DashboardKPIs {
+  coverage_rate_percent?: number;
+  hard_violations_count?: number;
+  active_conflicts?: number;
+  average_tat_slack_minutes?: number;
+  deadhead_positioning_legs?: number;
+}
+
+export interface ADSTelemetry {
+  hash_table_items?: number;
+  hash_table_load_factor?: number;
+  btree_keys?: number;
+  btree_height?: number;
+  interval_tree_nodes?: number;
+  graph_vertices?: number;
+  graph_edges?: number;
+  schedule_btree?: {
+    size?: number;
+    height?: number;
+    degree_t?: number;
+    total_nodes?: number;
+    [key: string]: any;
+  };
+  connection_graph?: {
+    vertex_count?: number;
+    edge_count?: number;
+    [key: string]: any;
+  };
+  total_crew_duty_intervals?: number;
+  total_aircraft_intervals?: number;
+  invariants_verified?: boolean;
+}
+
 export interface DashboardSummary {
-  system_name: string;
-  carrier_name: string;
-  rule_profile_id: string;
-  academic_disclaimer: string;
-  current_time_utc: number;
+  system_name?: string;
+  carrier_name?: string;
+  airline?: string;
+  active_rule_profile?: string;
+  rule_profile_id?: string;
+  academic_disclaimer?: string;
+  is_educational_simulator?: boolean;
+  academic_institution?: string;
+  course?: string;
+  current_time_utc?: number;
   total_flights: number;
-  covered_flights: number;
-  unassigned_flights: number;
-  active_aircraft: number;
-  active_crew: number;
-  disruptions_active: number;
-  kpis: {
-    coverage_rate_percent: number;
-    hard_violations_count: number;
-    active_conflicts: number;
-    average_tat_slack_minutes: number;
-    deadhead_positioning_legs: number;
-  };
-  ads_telemetry: {
-    hash_table_items: number;
-    hash_table_load_factor: number;
-    btree_keys: number;
-    btree_height: number;
-    interval_tree_nodes: number;
-    graph_vertices: number;
-    graph_edges: number;
-  };
+  covered_flights?: number;
+  unassigned_flights?: number;
+  active_aircraft?: number;
+  total_aircraft?: number;
+  active_crew?: number;
+  total_crew?: number;
+  total_airports?: number;
+  disruptions_active?: number;
+  kpis?: DashboardKPIs;
+  ads_telemetry?: ADSTelemetry;
 }
 
 export interface BTreeRangeTelemetry {
@@ -150,11 +177,13 @@ export interface BTreeRangeTelemetry {
 }
 
 export interface FlightsResponse {
-  total: number;
-  page: number;
-  page_size: number;
+  total?: number;
+  count?: number;
+  page?: number;
+  page_size?: number;
   flights: FlightLeg[];
   btree_range_telemetry?: BTreeRangeTelemetry | null;
+  b_tree_telemetry?: any;
 }
 
 export interface RuleProfileParam {

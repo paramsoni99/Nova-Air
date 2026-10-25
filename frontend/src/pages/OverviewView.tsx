@@ -36,22 +36,55 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     );
   }
 
-  const kpis = summary?.kpis || {
-    coverage_rate_percent: 0,
-    hard_violations_count: 0,
-    active_conflicts: 0,
-    average_tat_slack_minutes: 0,
-    deadhead_positioning_legs: 0,
+  // Robust metric extraction with fallbacks to avoid undefined property access
+  const kpis = {
+    coverage_rate_percent: summary?.kpis?.coverage_rate_percent ?? 0,
+    hard_violations_count: summary?.kpis?.hard_violations_count ?? 0,
+    active_conflicts: summary?.kpis?.active_conflicts ?? 0,
+    average_tat_slack_minutes: summary?.kpis?.average_tat_slack_minutes ?? 0,
+    deadhead_positioning_legs: summary?.kpis?.deadhead_positioning_legs ?? 0,
   };
 
-  const ads = summary?.ads_telemetry || {
-    hash_table_items: 0,
-    hash_table_load_factor: 0,
-    btree_keys: 0,
-    btree_height: 0,
-    interval_tree_nodes: 0,
-    graph_vertices: 0,
-    graph_edges: 0,
+  const ads = {
+    hash_table_items:
+      summary?.ads_telemetry?.hash_table_items ??
+      (summary ? (summary.total_flights || 0) + (summary.total_crew || 0) + (summary.total_aircraft || 0) + (summary.total_airports || 0) : 0),
+    hash_table_load_factor:
+      summary?.ads_telemetry?.hash_table_load_factor ?? 0.0,
+    btree_keys:
+      summary?.ads_telemetry?.btree_keys ??
+      summary?.ads_telemetry?.schedule_btree?.size ??
+      summary?.total_flights ??
+      0,
+    btree_height:
+      summary?.ads_telemetry?.btree_height ??
+      summary?.ads_telemetry?.schedule_btree?.height ??
+      0,
+    interval_tree_nodes:
+      summary?.ads_telemetry?.interval_tree_nodes ??
+      ((summary?.ads_telemetry?.total_crew_duty_intervals ?? 0) + (summary?.ads_telemetry?.total_aircraft_intervals ?? 0)),
+    graph_vertices:
+      summary?.ads_telemetry?.graph_vertices ??
+      summary?.ads_telemetry?.connection_graph?.vertex_count ??
+      0,
+    graph_edges:
+      summary?.ads_telemetry?.graph_edges ??
+      summary?.ads_telemetry?.connection_graph?.edge_count ??
+      0,
+  };
+
+  const formatDecimal = (val?: number | null, digits: number = 1, fallback: string = '0.0'): string => {
+    if (typeof val === 'number' && !isNaN(val)) {
+      return val.toFixed(digits);
+    }
+    return fallback;
+  };
+
+  const formatInt = (val?: number | null, fallback: number | string = 0): string | number => {
+    if (typeof val === 'number' && !isNaN(val)) {
+      return val;
+    }
+    return fallback;
   };
 
   const formatUtcTime = (epochSeconds: number) => {
@@ -65,23 +98,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       {/* Educational Banner */}
       <div className="p-3 rounded-lg bg-gradient-to-r from-cyan-950/60 to-slate-900 border border-cyan-800/40 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded bg-cyan-500/20 text-cyan-400">
+          <div className="p-1.5 rounded bg-cyan-500/20 text-cyan-500">
             <TrendingUp className="w-4 h-4" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-white">
+            <div className="text-sm font-bold text-black dark:text-white">
               Nova Air System Operations Control Center — Live Simulation Mode
             </div>
-            <div className="text-[11px] text-slate-400">
-              NMIMS MPSTME Advanced Data Structures (ADS) Course | Profile: <span className="font-mono text-cyan-300 font-medium">nova_air_demo_v1</span>
-            </div>
           </div>
-        </div>
-        <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
-          <span>Active Invariants:</span>
-          <span className="px-2 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-700/50 font-bold">
-            100% FAIL-CLOSED
-          </span>
         </div>
       </div>
 
@@ -94,7 +118,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <CheckCircle className="w-3.5 h-3.5 text-cyan-400" />
           </div>
           <div className="text-xl font-bold text-white font-mono">
-            {kpis.coverage_rate_percent.toFixed(1)}%
+            {formatDecimal(kpis.coverage_rate_percent, 1)}%
           </div>
           <div className="text-[10px] text-slate-500 mt-1">
             {summary?.covered_flights || 0} of {summary?.total_flights || 0} legs covered
@@ -183,7 +207,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
             <button
               onClick={() => onNavigate('schedule')}
-              className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium transition"
+              className="text-xs text-sky-700 dark:text-cyan-400 hover:text-sky-900 dark:hover:text-cyan-300 flex items-center gap-1 font-semibold transition"
             >
               <span>View All Flights</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -237,11 +261,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         </td>
                         <td className="py-2 px-3 text-right">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                              isCovered
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isCovered
                                 ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
                                 : 'bg-amber-950/60 text-amber-400 border border-amber-800/60'
-                            }`}
+                              }`}
                           >
                             {isCovered ? 'ASSIGNED' : 'UNASSIGNED'}
                           </span>
@@ -271,7 +294,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
             <button
               onClick={() => onNavigate('laboratory')}
-              className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium transition"
+              className="text-xs text-sky-700 dark:text-cyan-400 hover:text-sky-900 dark:hover:text-cyan-300 flex items-center gap-1 font-semibold transition"
             >
               <span>Inspect Lab</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -286,8 +309,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <span className="text-[10px] text-slate-500">O(1) lookups</span>
               </div>
               <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                <span>Indexed Entities: <strong className="text-white">{ads.hash_table_items}</strong></span>
-                <span>Load Factor: <strong className="text-emerald-400">{ads.hash_table_load_factor.toFixed(2)}</strong></span>
+                <span>Indexed Entities: <strong className="text-white">{formatInt(ads.hash_table_items)}</strong></span>
+                <span>Load Factor: <strong className="text-emerald-400">{formatDecimal(ads.hash_table_load_factor, 2, '0.00')}</strong></span>
               </div>
             </div>
 
@@ -298,8 +321,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <span className="text-[10px] text-slate-500">O(log n + k) range</span>
               </div>
               <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                <span>Keys in Schedule: <strong className="text-white">{ads.btree_keys}</strong></span>
-                <span>Tree Height: <strong className="text-emerald-400">{ads.btree_height}</strong></span>
+                <span>Keys in Schedule: <strong className="text-white">{formatInt(ads.btree_keys)}</strong></span>
+                <span>Tree Height: <strong className="text-emerald-400">{formatInt(ads.btree_height)}</strong></span>
               </div>
             </div>
 
@@ -310,7 +333,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <span className="text-[10px] text-slate-500">O(log n) overlaps</span>
               </div>
               <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                <span>Active Duty/TAT Intervals: <strong className="text-white">{ads.interval_tree_nodes}</strong></span>
+                <span>Active Duty/TAT Intervals: <strong className="text-white">{formatInt(ads.interval_tree_nodes)}</strong></span>
                 <span className="text-emerald-400 font-bold">SENTINEL NIL OK</span>
               </div>
             </div>
@@ -322,8 +345,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <span className="text-[10px] text-slate-500">Dijkstra deadhead</span>
               </div>
               <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                <span>Vertices: <strong className="text-white">{ads.graph_vertices}</strong></span>
-                <span>Feasible Edges: <strong className="text-cyan-300">{ads.graph_edges}</strong></span>
+                <span>Vertices: <strong className="text-white">{formatInt(ads.graph_vertices)}</strong></span>
+                <span>Feasible Edges: <strong className="text-cyan-300">{formatInt(ads.graph_edges)}</strong></span>
               </div>
             </div>
 

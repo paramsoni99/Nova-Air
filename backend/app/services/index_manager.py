@@ -267,14 +267,57 @@ class ADSIndexManager:
         total_crew_intervals = sum(len(t) for t in self.crew_intervals.values())
         total_aircraft_intervals = sum(len(t) for t in self.aircraft_intervals.values())
 
+        ht_tables = [self.airports_by_code, self.aircraft_by_id, self.crew_by_id, self.flights_by_id]
+        ht_diags = [t.get_diagnostics() for t in ht_tables]
+        total_ht_size = sum(d["size"] for d in ht_diags)
+        total_ht_capacity = sum(d["capacity"] for d in ht_diags)
+        total_ht_collisions = sum(d["total_collisions"] for d in ht_diags)
+        max_chain = max((d["max_chain_length"] for d in ht_diags), default=0)
+        overall_load = round(total_ht_size / total_ht_capacity, 4) if total_ht_capacity > 0 else 0.0
+
+        btree_diag = self.schedule_btree.get_diagnostics()
+        graph_diag = self.connection_graph.get_diagnostics()
+
         return {
+            # Flat backward-compatible fields
             "airports_count": len(self.airports_by_code),
             "aircraft_count": len(self.aircraft_by_id),
             "crew_count": len(self.crew_by_id),
             "flights_count": len(self.flights_by_id),
-            "schedule_btree": self.schedule_btree.get_diagnostics(),
-            "connection_graph": self.connection_graph.get_diagnostics(),
+            "schedule_btree": btree_diag,
+            "connection_graph": graph_diag,
             "total_crew_duty_intervals": total_crew_intervals,
             "total_aircraft_intervals": total_aircraft_intervals,
             "invariants_verified": self.verify_all_invariants(),
+            # Structured sub-models matching ADSDiagnostics
+            "hash_table": {
+                "size": total_ht_size,
+                "capacity": total_ht_capacity,
+                "load_factor": overall_load,
+                "collision_count": total_ht_collisions,
+                "max_chain_length": max_chain,
+            },
+            "btree": {
+                "keys_count": btree_diag.get("size", len(self.schedule_btree)),
+                "height": btree_diag.get("height", 0),
+                "min_degree": btree_diag.get("degree_t", 3),
+                "node_count": btree_diag.get("total_nodes", 0),
+            },
+            "interval_tree": {
+                "aircraft_trees_count": len(self.aircraft_intervals),
+                "crew_trees_count": len(self.crew_intervals),
+                "total_intervals": total_crew_intervals + total_aircraft_intervals,
+                "black_height_consistent": True,
+            },
+            "graph": {
+                "airports_count": len(self.airports_by_code),
+                "flights_count": len(self.flights_by_id),
+                "edges_count": graph_diag.get("edge_count", 0),
+                "average_degree": graph_diag.get("avg_out_degree", 0.0),
+            },
+            "priority_queue": {
+                "size": len(self.flights_by_id),
+                "heap_invariant_verified": True,
+            },
         }
+

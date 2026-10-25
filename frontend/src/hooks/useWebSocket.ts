@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { WebSocketEvent } from '../types';
+import { WS_URL } from '../config';
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
@@ -15,11 +16,13 @@ export function useWebSocket(onEventReceived?: (event: WebSocketEvent) => void) 
       return;
     }
 
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     setStatus('connecting');
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host || 'localhost:3000';
-    // When developing with Vite proxy, ws://localhost:3000/ws proxies to ws://localhost:8000/ws
-    const wsUrl = `${protocol}//${host}/ws/operations`;
+    const wsUrl = WS_URL;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -46,10 +49,12 @@ export function useWebSocket(onEventReceived?: (event: WebSocketEvent) => void) 
       ws.onclose = () => {
         setStatus('disconnected');
         wsRef.current = null;
-        // Auto-reconnect after 3s
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 3000);
+        if (!reconnectTimeoutRef.current) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            connect();
+          }, 3000);
+        }
       };
 
       ws.onerror = () => {

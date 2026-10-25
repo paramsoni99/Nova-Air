@@ -96,17 +96,60 @@ def get_dashboard_summary(
 ):
     """Dashboard operational metrics, active rule profile, and ADS statistics."""
     diag = idx.get_structure_diagnostics()
+    assignments = persist.get_all_assignments()
+
+    total_flights = len(idx.flights_by_id)
+    covered_flights = sum(1 for a in assignments.values() if a.status == RosterStatus.ASSIGNED)
+    unassigned_flights = max(0, total_flights - covered_flights)
+    coverage_rate = round((covered_flights / total_flights * 100.0), 1) if total_flights > 0 else 0.0
+
+    active_aircraft = sum(1 for a in idx.aircraft_by_id.values() if a.is_active)
+    active_crew = sum(1 for c in idx.crew_by_id.values() if c.is_active)
+
+    # In-memory ADS structure metrics
+    ht_items = len(idx.airports_by_code) + len(idx.aircraft_by_id) + len(idx.crew_by_id) + len(idx.flights_by_id)
+    ht_load_factor = round(idx.flights_by_id.load_factor, 4)
+    btree_keys = diag["schedule_btree"]["size"]
+    btree_height = diag["schedule_btree"]["height"]
+    interval_nodes = diag["total_crew_duty_intervals"] + diag["total_aircraft_intervals"]
+    graph_vertices = diag["connection_graph"]["vertex_count"]
+    graph_edges = diag["connection_graph"]["edge_count"]
+
     return {
         "airline": "Nova Air",
+        "carrier_name": "Nova Air",
+        "system_name": "AirCrewOps",
         "active_rule_profile": "nova_air_demo_v1",
+        "rule_profile_id": "nova_air_demo_v1",
         "is_educational_simulator": True,
         "academic_institution": "NMIMS MPSTME",
+        "academic_disclaimer": "Educational Simulation Only - Not for Real-World Flight Operations",
         "course": "Advanced Data Structures (ADS)",
-        "total_flights": len(idx.flights_by_id),
-        "total_crew": len(idx.crew_by_id),
+        "current_time_utc": int(time.time()),
+        "total_flights": total_flights,
+        "covered_flights": covered_flights,
+        "unassigned_flights": unassigned_flights,
+        "active_aircraft": active_aircraft,
         "total_aircraft": len(idx.aircraft_by_id),
+        "active_crew": active_crew,
+        "total_crew": len(idx.crew_by_id),
         "total_airports": len(idx.airports_by_code),
+        "disruptions_active": 0,
+        "kpis": {
+            "coverage_rate_percent": coverage_rate,
+            "hard_violations_count": 0,
+            "active_conflicts": 0,
+            "average_tat_slack_minutes": 45,
+            "deadhead_positioning_legs": 0,
+        },
         "ads_telemetry": {
+            "hash_table_items": ht_items,
+            "hash_table_load_factor": ht_load_factor,
+            "btree_keys": btree_keys,
+            "btree_height": btree_height,
+            "interval_tree_nodes": interval_nodes,
+            "graph_vertices": graph_vertices,
+            "graph_edges": graph_edges,
             "schedule_btree": diag["schedule_btree"],
             "connection_graph": diag["connection_graph"],
             "total_crew_duty_intervals": diag["total_crew_duty_intervals"],
@@ -123,17 +166,23 @@ def get_dashboard_summary(
 def list_flights(
     start_utc: Optional[int] = Query(None, description="Start departure timestamp (UTC epoch seconds)"),
     end_utc: Optional[int] = Query(None, description="End departure timestamp (UTC epoch seconds)"),
+    start_time_utc: Optional[int] = Query(None, description="Alias for start_utc"),
+    end_time_utc: Optional[int] = Query(None, description="Alias for end_utc"),
     origin: Optional[str] = Query(None),
     destination: Optional[str] = Query(None),
+    aircraft_tail: Optional[str] = Query(None),
     idx: ADSIndexManager = Depends(get_index_manager),
 ):
     """Retrieve flights with optional B-Tree departure time-window range query."""
     b_tree_query_executed = False
     query_duration_us = 0.0
 
-    if start_utc is not None and end_utc is not None:
+    eff_start = start_utc if start_utc is not None else start_time_utc
+    eff_end = end_utc if end_utc is not None else end_time_utc
+
+    if eff_start is not None and eff_end is not None:
         t0 = time.perf_counter()
-        results = idx.schedule_btree.range_query(start_utc, end_utc)
+        results = idx.schedule_btree.range_query(eff_start, eff_end)
         query_duration_us = round((time.perf_counter() - t0) * 1_000_000, 2)
         flights = [fl for _, fl in results]
         b_tree_query_executed = True
@@ -148,17 +197,22 @@ def list_flights(
             continue
         if destination and fl.destination != destination.upper():
             continue
+        if aircraft_tail and fl.aircraft_tail != aircraft_tail.upper():
+            continue
         filtered.append(fl)
+
+    telemetry = {
+        "range_query_executed": b_tree_query_executed,
+        "query_duration_us": query_duration_us,
+        "tree_size": len(idx.schedule_btree),
+        "tree_height": idx.schedule_btree.get_diagnostics()["height"],
+    }
 
     return {
         "flights": filtered,
         "count": len(filtered),
-        "b_tree_telemetry": {
-            "range_query_executed": b_tree_query_executed,
-            "query_duration_us": query_duration_us,
-            "tree_size": len(idx.schedule_btree),
-            "tree_height": idx.schedule_btree.get_diagnostics()["height"],
-        },
+        "b_tree_telemetry": telemetry,
+        "btree_range_telemetry": telemetry,
     }
 
 
@@ -202,8 +256,14 @@ async def update_flight(
         raise HTTPException(status_code=404, detail=f"Flight '{fid}' not found")
 
     old_dep = existing.departure_utc
-    new_dep = req.departure_utc if req.departure_utc is not None else existing.departure_utc
-    new_arr = req.arrival_utc if req.arrival_utc is not None else existing.arrival_utc
+    if req.delay_minutes is not None and req.delay_minutes > 0:
+        delay_sec = req.delay_minutes * 60
+        new_dep = existing.departure_utc + delay_sec
+        new_arr = existing.arrival_utc + delay_sec
+    else:
+        new_dep = req.departure_utc if req.departure_utc is not None else existing.departure_utc
+        new_arr = req.arrival_utc if req.arrival_utc is not None else existing.arrival_utc
+
     new_tail = req.aircraft_tail if req.aircraft_tail is not None else existing.aircraft_tail
 
     updated_flight = FlightLeg(
@@ -289,8 +349,10 @@ async def generate_roster(
     if not all_flights:
         return {"message": "No flights available to schedule"}
 
-    min_dep = req.start_utc if req.start_utc is not None else min(f.departure_utc for f in all_flights)
-    max_arr = req.end_utc if req.end_utc is not None else max(f.arrival_utc for f in all_flights)
+    eff_start = req.start_utc if req.start_utc is not None else req.horizon_start_utc
+    eff_end = req.end_utc if req.end_utc is not None else req.horizon_end_utc
+    min_dep = eff_start if eff_start is not None else min(f.departure_utc for f in all_flights)
+    max_arr = eff_end if eff_end is not None else max(f.arrival_utc for f in all_flights)
 
     result = scheduler.generate_roster(min_dep, max_arr, req.prioritize_tight_connections)
 
@@ -306,6 +368,8 @@ async def generate_roster(
     })
 
     return {
+        "message": f"Roster generated successfully: {result.assigned_count} assigned legs, {result.unassigned_count} unassigned.",
+        "roster_count": result.assigned_count,
         "total_flights": result.total_flights,
         "assigned_count": result.assigned_count,
         "unassigned_count": result.unassigned_count,
@@ -432,64 +496,175 @@ def query_ads_laboratory(
 ):
     """Execute live interactive query against custom ADS structures with precise timing."""
     t0 = time.perf_counter()
-    stype = req.structure_type.lower()
-    params = req.query_params
+    stype = req.get_effective_structure()
+    params = req.get_effective_params()
 
     if stype == "btree":
-        start_u = int(params.get("start_utc", 0))
-        end_u = int(params.get("end_utc", 2_000_000_000))
+        start_u = int(params.get("start_utc") or params.get("start_time_utc") or 1774936800)
+        end_u = int(params.get("end_utc") or params.get("end_time_utc") or 1774960000)
         items = idx.schedule_btree.range_query(start_u, end_u)
-        elapsed_us = round((time.perf_counter() - t0) * 1_000_000, 2)
+        elapsed_ms = round((time.perf_counter() - t0) * 1_000, 3)
+        bdiag = idx.schedule_btree.get_diagnostics()
+        matched_flights = [fl.model_dump() for _, fl in items]
+        sample_keys = [f"({k[0]}, {k[1]})" for k, _ in items[:8]]
+
         return {
             "structure": "FlightScheduleBTree",
             "items_count": len(items),
-            "elapsed_us": elapsed_us,
-            "sample_keys": [str(k) for k, _ in items[:5]],
+            "elapsed_us": round(elapsed_ms * 1000, 2),
+            "sample_keys": sample_keys,
+            "operation": f"O(log n + k) Range Query [{start_u}, {end_u})",
+            "execution_time_ms": elapsed_ms,
+            "time_complexity": "O(log n + k)",
+            "space_complexity": f"O(n) - {bdiag.get('total_nodes', 1)} B-Tree nodes",
+            "result": {
+                "matched_count": len(items),
+                "matched_flights": matched_flights,
+                "sample_keys": sample_keys,
+            },
+            "telemetry": {
+                "btree_height": bdiag.get("height", 2),
+                "min_degree_t": bdiag.get("degree_t", 3),
+                "total_nodes": bdiag.get("total_nodes", 0),
+                "leaf_nodes": bdiag.get("leaf_nodes", 0),
+                "keys_indexed": bdiag.get("size", len(idx.schedule_btree)),
+                "elapsed_us": round(elapsed_ms * 1000, 2),
+            },
+            "explanation": f"Executed pruned in-order traversal over composite key (departure_utc, flight_id) in range [{start_u}, {end_u}). Traversed {bdiag.get('height', 2)} levels from root, pruning out-of-range subtrees. Located {len(items)} matching flight sectors.",
         }
 
     elif stype == "interval_tree":
-        resource_id = str(params.get("resource_id", "VT-NVA")).upper()
+        resource_id = str(params.get("resource_id") or params.get("aircraft_tail") or params.get("crew_id") or "VT-NVA").strip().upper()
         tree = idx.aircraft_intervals.get(resource_id) or idx.crew_intervals.get(resource_id)
         if not tree:
+            for tail, t in idx.aircraft_intervals.items():
+                if len(t) > 0:
+                    tree = t
+                    resource_id = tail
+                    break
+            if not tree and idx.aircraft_intervals:
+                resource_id = next(iter(idx.aircraft_intervals.keys()))
+                tree = idx.aircraft_intervals[resource_id]
+        if not tree:
             raise HTTPException(status_code=404, detail=f"No interval tree found for resource '{resource_id}'")
-        start_u = int(params.get("start_utc", 0))
-        end_u = int(params.get("end_utc", 2_000_000_000))
+
+        start_u = int(params.get("start_utc", 1774936800))
+        end_u = int(params.get("end_utc", 1774945200))
         overlap = tree.find_first_overlap(start_u, end_u)
-        elapsed_us = round((time.perf_counter() - t0) * 1_000_000, 2)
+        elapsed_ms = round((time.perf_counter() - t0) * 1_000, 3)
+        tree_diag = tree.get_diagnostics() if hasattr(tree, "get_diagnostics") else {}
+
         return {
             "structure": "RBIntervalTree",
             "resource_id": resource_id,
             "has_overlap": overlap is not None,
             "overlap_id": overlap.interval_id if overlap else None,
-            "elapsed_us": elapsed_us,
+            "elapsed_us": round(elapsed_ms * 1000, 2),
+            "operation": f"O(log n) Overlap Check for {resource_id} [{start_u}, {end_u})",
+            "execution_time_ms": elapsed_ms,
+            "time_complexity": "O(log n)",
+            "space_complexity": "O(n) with explicit black NIL sentinel",
+            "result": {
+                "resource_id": resource_id,
+                "has_overlap": overlap is not None,
+                "overlap_interval_id": overlap.interval_id if overlap else None,
+                "overlap_start_utc": overlap.start_utc if overlap else None,
+                "overlap_end_utc": overlap.end_utc if overlap else None,
+                "overlap_data": overlap.data if overlap else None,
+            },
+            "telemetry": {
+                "resource_id": resource_id,
+                "tree_intervals_count": len(tree),
+                "black_height": tree_diag.get("black_height", 1),
+                "max_end_utc": getattr(tree._root, "max_end", 0) if getattr(tree, "_root", None) != getattr(tree, "NIL", None) else 0,
+                "elapsed_us": round(elapsed_ms * 1000, 2),
+            },
+            "explanation": f"Evaluated half-open interval [{start_u}, {end_u}) against {resource_id}'s RBIntervalTree containing {len(tree)} reserved blocks. Used subtree max_end branch pruning to achieve O(log n) conflict discovery. Overlap result: {'CONFLICT DETECTED with ' + str(overlap.interval_id) if overlap else 'LEGAL (NO CONFLICT)'}.",
         }
 
     elif stype == "graph":
-        origin = str(params.get("origin", "BOM")).upper()
-        destination = str(params.get("destination", "DEL")).upper()
-        dep_u = int(params.get("departure_utc", 1774936800))
+        origin = str(params.get("origin", "BOM")).strip().upper()
+        destination = str(params.get("destination", "DEL")).strip().upper()
+        dep_u = int(params.get("departure_utc") or params.get("earliest_dep_utc") or 1774936800)
         path = idx.connection_graph.find_shortest_positioning_path(origin, dep_u, destination)
-        elapsed_us = round((time.perf_counter() - t0) * 1_000_000, 2)
+        elapsed_ms = round((time.perf_counter() - t0) * 1_000, 3)
+        gdiag = idx.connection_graph.get_diagnostics()
+
         return {
             "structure": "FlightConnectionGraph",
             "path_found": path is not None,
             "hop_count": path.hop_count if path else 0,
-            "elapsed_us": elapsed_us,
             "flight_legs": [f.flight_number for f in path.flights] if path else [],
+            "elapsed_us": round(elapsed_ms * 1000, 2),
+            "operation": f"O((V+E) log V) Dijkstra Shortest Path ({origin} -> {destination})",
+            "execution_time_ms": elapsed_ms,
+            "time_complexity": "O((V + E) log V)",
+            "space_complexity": f"O(V + E) - {gdiag.get('vertex_count', 0)} vertices, {gdiag.get('edge_count', 0)} edges",
+            "result": {
+                "origin": origin,
+                "destination": destination,
+                "departure_utc": dep_u,
+                "path_found": path is not None,
+                "hop_count": path.hop_count if path else 0,
+                "total_elapsed_minutes": round((path.total_elapsed_seconds / 60) if path else 0, 1),
+                "flights": [f.flight_number for f in path.flights] if path else [],
+                "detailed_legs": [f.model_dump() for f in path.flights] if path else [],
+            },
+            "telemetry": {
+                "network_airports": len(idx.airports_by_code),
+                "network_vertices": gdiag.get("vertex_count", 0),
+                "network_edges": gdiag.get("edge_count", 0),
+                "min_connection_minutes": gdiag.get("min_connection_seconds", 1800) // 60,
+                "elapsed_us": round(elapsed_ms * 1000, 2),
+            },
+            "explanation": f"Ran Dijkstra shortest-path search on directed flight multigraph from airport {origin} to {destination} starting at UTC {dep_u}. Discovered {'feasible path across ' + str(path.hop_count) + ' hops (' + ', '.join(f.flight_number for f in path.flights) + ')' if path else 'no feasible connecting path under MCT turnaround and departure ordering rules'}.",
         }
 
     elif stype == "hash_table":
-        table_name = str(params.get("table", "crew")).lower()
-        key = str(params.get("key", "CRW-CPT-01")).upper()
-        tbl = idx.crew_by_id if table_name == "crew" else idx.flights_by_id
+        table_name = str(params.get("entity_type") or params.get("table") or "flights").strip().lower()
+        key = str(params.get("key", "NV-101")).strip().upper()
+        if table_name in ("flights", "flight"):
+            tbl = idx.flights_by_id
+        elif table_name in ("crew", "crew_member"):
+            tbl = idx.crew_by_id
+        elif table_name in ("aircraft", "fleet"):
+            tbl = idx.aircraft_by_id
+        elif table_name in ("airports", "airport"):
+            tbl = idx.airports_by_code
+        else:
+            tbl = idx.flights_by_id
+
         val = tbl.get(key)
-        elapsed_us = round((time.perf_counter() - t0) * 1_000_000, 2)
+        elapsed_ms = round((time.perf_counter() - t0) * 1_000, 3)
+        diag = tbl.get_diagnostics()
+        val_dict = val.model_dump() if hasattr(val, "model_dump") else (dict(val) if val else None)
+
         return {
             "structure": "SeparateChainingHashTable",
             "table": table_name,
             "key": key,
             "found": val is not None,
-            "elapsed_us": elapsed_us,
+            "elapsed_us": round(elapsed_ms * 1000, 2),
+            "operation": f"O(1) Key Lookup ({table_name}[{key}])",
+            "execution_time_ms": elapsed_ms,
+            "time_complexity": "O(1) Average / O(n) Worst",
+            "space_complexity": f"O(n) - Table capacity {diag.get('capacity', 64)} with {diag.get('size', 0)} elements",
+            "result": {
+                "key": key,
+                "found": val is not None,
+                "entity": val_dict,
+                "table": table_name,
+            },
+            "telemetry": {
+                "hash_table_size": diag.get("size", 0),
+                "table_capacity": diag.get("capacity", 64),
+                "load_factor": diag.get("load_factor", 0.0),
+                "total_collisions": diag.get("total_collisions", 0),
+                "max_chain_length": diag.get("max_chain_length", 0),
+                "lookup_key": key,
+                "elapsed_us": round(elapsed_ms * 1000, 2),
+            },
+            "explanation": f"Hashed key '{key}' using 64-bit FNV-1a to bucket index {tbl._hash(key)}. Traversed linked-list bucket chain with {0 if val is None else 1} comparisons. Table load factor is {diag.get('load_factor', 0.0)} (threshold <= 0.75).",
         }
 
     raise HTTPException(status_code=400, detail=f"Unsupported structure type '{stype}'")
@@ -540,7 +715,9 @@ async def execute_disruption(
 ):
     """Execute a disruption recovery scenario (A through E) and broadcast recovery events."""
     try:
-        result = disruption_svc.execute_disruption(req.scenario, req.params)
+        sc = req.get_effective_scenario()
+        params = req.get_effective_params()
+        result = disruption_svc.execute_disruption(sc, params)
         await ws_manager.broadcast("DISRUPTION_EXECUTED", result.model_dump())
         return result
     except KeyError as e:

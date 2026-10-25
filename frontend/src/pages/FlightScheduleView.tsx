@@ -58,18 +58,24 @@ export const FlightScheduleView: React.FC<FlightScheduleViewProps> = ({
 
   const handleApplyPreset = (preset: string) => {
     setSelectedRangePreset(preset);
-    const now = Math.floor(Date.now() / 1000);
-    // Base departure epoch for demo dataset is around 1772000000 or relative to dataset
     if (preset === 'all') {
       onRangeSearch(undefined, undefined);
-    } else if (preset === '6h') {
-      onRangeSearch(now, now + 6 * 3600);
+      return;
+    }
+
+    // Anchor time window to the earliest scheduled departure or demo dataset baseline
+    const baseTime = flights.length > 0
+      ? Math.min(...flights.map(f => f.departure_utc || 1774936800))
+      : 1774936800;
+
+    if (preset === '6h') {
+      onRangeSearch(baseTime, baseTime + 6 * 3600);
     } else if (preset === '12h') {
-      onRangeSearch(now, now + 12 * 3600);
+      onRangeSearch(baseTime, baseTime + 12 * 3600);
     } else if (preset === '24h') {
-      onRangeSearch(now, now + 24 * 3600);
+      onRangeSearch(baseTime, baseTime + 24 * 3600);
     } else if (preset === '48h') {
-      onRangeSearch(now, now + 48 * 3600);
+      onRangeSearch(baseTime, baseTime + 48 * 3600);
     }
   };
 
@@ -209,7 +215,7 @@ export const FlightScheduleView: React.FC<FlightScheduleViewProps> = ({
           <button
             onClick={onRefresh}
             disabled={isLoading}
-            className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition shadow-2xs"
             title="Refresh schedule"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -220,7 +226,7 @@ export const FlightScheduleView: React.FC<FlightScheduleViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-sm transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-xs transition"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Flight Leg</span>
@@ -229,29 +235,29 @@ export const FlightScheduleView: React.FC<FlightScheduleViewProps> = ({
       </div>
 
       {/* Interactive B-Tree Departure Window Range Query Panel */}
-      <div className="p-4 rounded-xl bg-slate-900/90 border border-cyan-900/40 shadow-sm space-y-3">
+      <div className="p-4 rounded-xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-cyan-900/40 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-cyan-400" />
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+            <Cpu className="w-4 h-4 text-sky-600 dark:text-cyan-400" />
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider font-mono">
               B-Tree Departure Window Range Query Inspector
             </h4>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono">
+            <span className="text-[10px] px-2 py-0.5 rounded bg-sky-50 dark:bg-cyan-950 text-sky-700 dark:text-cyan-300 border border-sky-200 dark:border-cyan-800/60 font-mono">
               FlightScheduleBTree (min_degree=3)
             </span>
           </div>
 
           {/* Window Presets */}
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[11px] text-slate-400 font-mono mr-1">Horizon:</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mr-1">Horizon:</span>
             {['all', '6h', '12h', '24h', '48h'].map((preset) => (
               <button
                 key={preset}
                 onClick={() => handleApplyPreset(preset)}
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition ${
                   selectedRangePreset === preset
-                    ? 'bg-cyan-600 text-white font-bold'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                    ? 'bg-sky-600 text-white font-bold shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-white'
                 }`}
               >
                 {preset.toUpperCase()}
@@ -365,7 +371,7 @@ export const FlightScheduleView: React.FC<FlightScheduleViewProps> = ({
                           setDelayMinutes(flight.delay_minutes || 45);
                           setDelayError(null);
                         }}
-                        className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-sans transition"
+                        className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-medium shadow-2xs transition"
                         title="Inject rotational delay or reschedule leg"
                       >
                         Delay Leg

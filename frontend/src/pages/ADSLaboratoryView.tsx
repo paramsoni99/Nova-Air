@@ -17,20 +17,21 @@ export const ADSLaboratoryView: React.FC = () => {
   const [queryError, setQueryError] = useState<string | null>(null);
 
   // Form parameters per sub-tab
+  // Form parameters per sub-tab (calibrated to demo dataset March 31, 2026)
   const [hashKey, setHashKey] = useState('NV-101');
   const [hashEntityType, setHashEntityType] = useState('flights');
 
-  const [btreeStartUtc, setBtreeStartUtc] = useState(1772000000);
-  const [btreeEndUtc, setBtreeEndUtc] = useState(1772100000);
+  const [btreeStartUtc, setBtreeStartUtc] = useState(1774936800);
+  const [btreeEndUtc, setBtreeEndUtc] = useState(1774960000);
 
-  const [intervalStartUtc, setIntervalStartUtc] = useState(1772000000);
-  const [intervalEndUtc, setIntervalEndUtc] = useState(1772020000);
+  const [intervalStartUtc, setIntervalStartUtc] = useState(1774936800);
+  const [intervalEndUtc, setIntervalEndUtc] = useState(1774945200);
   const [intervalTail, setIntervalTail] = useState('VT-NVA');
 
   const [graphOrigin, setGraphOrigin] = useState('BOM');
   const [graphDest, setGraphDest] = useState('DEL');
-  const [graphDepUtc, setGraphDepUtc] = useState(1772000000);
-  const [graphArrUtc] = useState(1772100000);
+  const [graphDepUtc, setGraphDepUtc] = useState(1774936800);
+  const [graphArrUtc] = useState(1774960000);
 
   useEffect(() => {
     async function loadDiag() {
@@ -54,13 +55,19 @@ export const ADSLaboratoryView: React.FC = () => {
 
     if (structure === 'hash_table') {
       operation = 'lookup';
-      params = { key: hashKey, entity_type: hashEntityType };
+      params = { key: hashKey, entity_type: hashEntityType, table: hashEntityType };
     } else if (structure === 'btree') {
       operation = 'range_query';
-      params = { start_time_utc: btreeStartUtc, end_time_utc: btreeEndUtc };
+      params = {
+        start_utc: btreeStartUtc,
+        end_utc: btreeEndUtc,
+        start_time_utc: btreeStartUtc,
+        end_time_utc: btreeEndUtc,
+      };
     } else if (structure === 'interval_tree') {
       operation = 'find_overlap';
       params = {
+        resource_id: intervalTail,
         aircraft_tail: intervalTail,
         start_utc: intervalStartUtc,
         end_utc: intervalEndUtc,
@@ -70,6 +77,7 @@ export const ADSLaboratoryView: React.FC = () => {
       params = {
         origin: graphOrigin,
         destination: graphDest,
+        departure_utc: graphDepUtc,
         earliest_dep_utc: graphDepUtc,
         latest_arr_utc: graphArrUtc,
       };
@@ -82,6 +90,9 @@ export const ADSLaboratoryView: React.FC = () => {
         params,
       });
       setLabResponse(res);
+      // Reload diagnostics to reflect any telemetry updates
+      const updatedDiag = await api.getADSDiagnostics();
+      setDiagnostics(updatedDiag);
     } catch (err: any) {
       setQueryError(err.message || 'Lab query execution failed');
     } finally {
@@ -436,7 +447,7 @@ export const ADSLaboratoryView: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
-                <span className="text-slate-400">Execution: <strong className="text-emerald-400">{labResponse.execution_time_ms.toFixed(2)} ms</strong></span>
+                <span className="text-slate-400">Execution: <strong className="text-emerald-400">{(labResponse.execution_time_ms ?? 0).toFixed(2)} ms</strong></span>
                 <span className="text-slate-400">Time Complexity: <strong className="text-cyan-300">{labResponse.time_complexity}</strong></span>
               </div>
             </div>

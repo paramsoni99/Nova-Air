@@ -28,7 +28,9 @@ export const CrewDirectoryView: React.FC<CrewDirectoryViewProps> = ({
   const roles = ['CAPTAIN', 'FIRST_OFFICER', 'CABIN_CREW'];
   const bases = ['BOM', 'DEL', 'BLR', 'HYD', 'MAA', 'CCU', 'GOI'];
 
-  const filteredCrew = crewList.filter((c) => {
+  const safeCrewList = Array.isArray(crewList) ? crewList : (crewList as any)?.crew || [];
+
+  const filteredCrew = safeCrewList.filter((c: CrewMember) => {
     const matchesSearch =
       !searchQuery ||
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -121,7 +123,7 @@ export const CrewDirectoryView: React.FC<CrewDirectoryViewProps> = ({
 
       {/* Crew Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        {filteredCrew.map((crew) => {
+        {filteredCrew.map((crew: CrewMember) => {
           const flightHours = crew.cumulative_flight_hours_7d || 0;
           const dutyHours = crew.cumulative_duty_hours_7d || 0;
           const maxFlight = 35; // 7-day DGCA limit
@@ -169,7 +171,7 @@ export const CrewDirectoryView: React.FC<CrewDirectoryViewProps> = ({
               <div className="space-y-1 text-xs">
                 <div className="text-[10px] text-slate-400 uppercase font-mono">Type Ratings:</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {crew.qualifications.map((q, idx) => {
+                  {crew.qualifications.map((q: any, idx: number) => {
                     const expired = isExpired(q.valid_until_utc);
                     return (
                       <span
@@ -222,12 +224,12 @@ export const CrewDirectoryView: React.FC<CrewDirectoryViewProps> = ({
               </div>
 
               {/* Card Footer: View Schedule Modal */}
-              <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
                 <button
                   onClick={() => handleOpenSchedule(crew)}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition flex items-center gap-1.5"
+                  className="px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium transition flex items-center gap-1.5 shadow-2xs"
                 >
-                  <Calendar className="w-3 h-3 text-cyan-400" />
+                  <Calendar className="w-3.5 h-3.5 text-sky-600 dark:text-cyan-400" />
                   <span>Inspect Duty Intervals</span>
                 </button>
               </div>
