@@ -1,0 +1,5 @@
+tail_number,aircraft_type,home_base,seating_capacity,total_flight_hours,is_active
+VT-NVA,A320,BOM,180,1200.0,true
+VT-NVB,A320,DEL,180,980.0,true
+VT-NVE,ATR72,BOM,72,640.0,true
+VT-NVF,ATR72,HYD,72,510.0,true

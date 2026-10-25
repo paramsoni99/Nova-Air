@@ -1,0 +1,6 @@
+code,name,city,country,timezone_offset_seconds,latitude,longitude,is_hub,curfew_start_hour_utc,curfew_end_hour_utc
+BOM,Chhatrapati Shivaji Maharaj International Airport,Mumbai,India,19800,19.0896,72.8656,true,,
+DEL,Indira Gandhi International Airport,New Delhi,India,19800,28.5562,77.1,true,,
+BLR,Kempegowda International Airport,Bengaluru,India,19800,13.1986,77.7066,true,,
+HYD,Rajiv Gandhi International Airport,Hyderabad,India,19800,17.2403,78.4294,false,,
+CCU,Netaji Subhash Chandra Bose International Airport,Kolkata,India,19800,22.6547,88.4467,false,,

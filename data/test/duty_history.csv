@@ -1,0 +1,2 @@
+id,crew_id,flight_leg_ids,report_utc,release_utc,duty_type,total_flight_seconds
+DUTY-TEST-01,CRW-CPT-01,NV-PREV-01,1774857600,1774879200,FLIGHT_DUTY,18000

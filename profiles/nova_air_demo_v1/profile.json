@@ -1,0 +1,52 @@
+{
+  "profile_id": "nova_air_demo_v1",
+  "airline_name": "Nova Air (Fictional Educational Airline)",
+  "version": "1.0.0",
+  "description": "DGCA India CAR Section 7 Series J based flight duty and rest constraints for Nova Air simulator.",
+  "flight_crew_rules": {
+    "roles": ["CAPTAIN", "FIRST_OFFICER"],
+    "max_daily_flight_time_seconds": 28800,
+    "max_daily_fdp_seconds": 45000,
+    "max_sectors_per_duty": 4,
+    "report_lead_time_seconds": 3600,
+    "release_buffer_seconds": 1800,
+    "min_connection_time_different_aircraft_seconds": 2400,
+    "min_connection_time_same_aircraft_seconds": 1800,
+    "min_inter_duty_rest_seconds": 43200,
+    "rest_must_equal_prior_fdp_if_greater": true,
+    "max_7d_flight_time_seconds": 126000,
+    "max_7d_duty_time_seconds": 216000,
+    "max_consecutive_duty_days": 6
+  },
+  "cabin_crew_rules": {
+    "roles": ["CABIN_CREW"],
+    "max_daily_flight_time_seconds": 36000,
+    "max_daily_fdp_seconds": 46800,
+    "max_sectors_per_duty": 5,
+    "report_lead_time_seconds": 3600,
+    "release_buffer_seconds": 1800,
+    "min_connection_time_different_aircraft_seconds": 2400,
+    "min_connection_time_same_aircraft_seconds": 1800,
+    "min_inter_duty_rest_seconds": 43200,
+    "rest_must_equal_prior_fdp_if_greater": true,
+    "max_7d_flight_time_seconds": 144000,
+    "max_7d_duty_time_seconds": 216000,
+    "max_consecutive_duty_days": 6
+  },
+  "aircraft_turnaround_times_seconds": {
+    "A320": 2700,
+    "ATR72": 1800
+  },
+  "crew_complement": {
+    "A320": {
+      "captains": 1,
+      "first_officers": 1,
+      "cabin_crew": 4
+    },
+    "ATR72": {
+      "captains": 1,
+      "first_officers": 1,
+      "cabin_crew": 2
+    }
+  }
+}

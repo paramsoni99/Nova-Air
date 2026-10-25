@@ -1,0 +1,3 @@
+id,aircraft_tail,airport_code,start_utc,end_utc,description
+MNT-DEMO-01,VT-NVA,BOM,1774987200,1775005200,Scheduled overnight avionics check
+MNT-DEMO-02,VT-NVE,HYD,1775059200,1775077200,Turboprop engine 100-hour inspection
