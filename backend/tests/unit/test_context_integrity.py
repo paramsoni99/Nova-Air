@@ -155,3 +155,63 @@ def test_implemented_rest_routes_exist_in_fastapi():
         else:
             assert (method, path) in app_routes, f"REST route '{method} {path}' marked IMPLEMENTED in Section 10 was not found in app.routes"
 
+
+def test_section5_ads_classes_and_methods_exist_via_reflection():
+    """Verify via Python reflection that all 5 critical-path ADS classes and methods exist."""
+    import importlib
+
+    expected_structures = {
+        "backend.app.data_structures.hash_table": {
+            "SeparateChainingHashTable": ["get", "put", "remove", "contains", "get_diagnostics", "__len__"]
+        },
+        "backend.app.data_structures.btree": {
+            "FlightScheduleBTree": ["insert", "delete", "search", "update_key", "range_query", "get_diagnostics", "__len__"]
+        },
+        "backend.app.data_structures.rb_interval_tree": {
+            "RBIntervalTree": ["insert", "delete", "find_first_overlap", "find_all_overlaps", "find_predecessor", "find_successor", "get_diagnostics", "__len__"]
+        },
+        "backend.app.data_structures.graph": {
+            "FlightConnectionGraph": ["add_flight", "remove_flight", "update_flight_vertex", "rebuild_from_flights", "find_shortest_positioning_path", "get_diagnostics", "verify_invariants"]
+        },
+        "backend.app.data_structures.priority_queue": {
+            "SchedulerPriorityQueue": ["push_or_update", "pop", "peek", "clear", "is_empty", "get_diagnostics", "__len__"]
+        },
+    }
+
+    for mod_name, classes in expected_structures.items():
+        mod = importlib.import_module(mod_name)
+        for cls_name, methods in classes.items():
+            cls = getattr(mod, cls_name, None)
+            assert cls is not None, f"Class '{cls_name}' not found in module '{mod_name}' via reflection"
+            for meth in methods:
+                assert hasattr(cls, meth), f"Method/attribute '{meth}' not found on '{cls_name}' via reflection"
+
+
+def test_section3_repository_map_paths_exist_on_disk():
+    """Verify all individual source, test, config, and profile paths in Section 3 exist on disk."""
+    ai_context_path = os.path.join(ROOT_DIR, "AI_CONTEXT.md")
+    with open(ai_context_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    sec3_match = re.search(r"## 3\. Repository Map.*?\n(.*?)(?=## 4\.|\Z)", content, re.DOTALL)
+    assert sec3_match, "Section 3 missing in AI_CONTEXT.md"
+    sec3_text = sec3_match.group(1)
+
+    # Match file paths like: ├── backend/app/api/routes.py or ├── profiles/nova_air_demo_v1/profile.json
+    path_matches = re.findall(r"[│├└─\s]+([a-zA-Z0-9_\-\./]+(?:\.[a-zA-Z0-9_]+))\s+<--", sec3_text)
+    assert len(path_matches) > 15, f"Expected >15 mapped files in Section 3, found {len(path_matches)}"
+
+    for rel_path in path_matches:
+        full_path = os.path.join(ROOT_DIR, rel_path)
+        if os.path.exists(full_path):
+            continue
+        # Also check under docs/ or other parent dirs if mapped hierarchically
+        found = False
+        basename = os.path.basename(rel_path)
+        for root, _, files in os.walk(ROOT_DIR):
+            if basename in files:
+                found = True
+                break
+        assert found, f"File mapped in Section 3 does not exist on disk: {rel_path}"
+
+
