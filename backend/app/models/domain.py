@@ -199,6 +199,15 @@ class RuleViolation(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
 
 
+class UncoveredReason(BaseModel):
+    flight_number: str
+    primary_cause: str
+    summary: str
+    aircraft_violations: List[RuleViolation] = Field(default_factory=list)
+    crew_violations: Dict[str, List[RuleViolation]] = Field(default_factory=dict)
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
 class FlightCrewRules(BaseModel):
     roles: List[str]
     max_daily_flight_time_seconds: int

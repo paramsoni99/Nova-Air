@@ -128,6 +128,10 @@ class SeparateChainingHashTable(Generic[K, V]):
         if (self._size / self._capacity) > self._max_load_factor:
             self._resize()
 
+    def insert(self, key: K, value: V) -> None:
+        """Alias for put."""
+        self.put(key, value)
+
     def get(self, key: K, default: Optional[V] = None) -> Optional[V]:
         """Retrieves value associated with key, or returns default."""
         bucket_idx = self._hash(key)

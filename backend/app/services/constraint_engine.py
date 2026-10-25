@@ -705,9 +705,11 @@ class ConstraintEngine:
         score = 0.0
         rules = self._get_rules_for_role(crew.role)
 
-        # 1. Home Base Preference (+100.0)
+        # 1. Home Base Preference (+100.0 for departing from base, +80.0 for returning to base)
         if crew.home_base == flight.origin:
             score += 100.0
+        elif crew.home_base == flight.destination:
+            score += 80.0
 
         # 2. Cumulative Workload Balancing (up to +50.0 for balanced flight time)
         max_7d = rules.max_7d_flight_time_seconds
@@ -719,8 +721,8 @@ class ConstraintEngine:
         if validation_result and validation_result.positioning_itinerary:
             score -= 40.0
 
-        # 4. Intra-Duty Continuation Efficiency (+30.0 for multi-leg efficiency)
+        # 4. Intra-Duty Continuation Efficiency (+100.0 for multi-leg pairing continuity)
         if validation_result and validation_result.is_intra_duty_continuation:
-            score += 30.0
+            score += 100.0
 
         return round(score, 2)
