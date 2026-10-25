@@ -75,8 +75,40 @@ class DisruptionCancelRequest(BaseModel):
     reason: str = "Weather cancellation"
 
 
+class DisruptionPreset(BaseModel):
+    scenario: str
+    scenario_type: str
+    name: str
+    description: str
+    default_params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DisruptionPresetsResponse(BaseModel):
+    presets: List[DisruptionPreset]
+
+
+class DisruptionExecuteRequest(BaseModel):
+    scenario: str = Field(..., description="'A' | 'B' | 'C' | 'D' | 'E' or 'PILOT_SICK' | 'AIRCRAFT_AOG' | 'FLIGHT_DELAY_CASCADE' | 'NO_LEGAL_SOLUTION' | 'INVALID_MANUAL_OVERRIDE'")
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DisruptionExecuteResponse(BaseModel):
+    scenario: str
+    scenario_type: str
+    success: bool
+    message: str
+    affected_flights: List[str] = Field(default_factory=list)
+    recovered_flights: List[str] = Field(default_factory=list)
+    unrecovered_flights: List[str] = Field(default_factory=list)
+    actions_taken: List[Dict[str, Any]] = Field(default_factory=list)
+    violations: List[RuleViolation] = Field(default_factory=list)
+    state_preserved: bool = True
+    invariants_verified: bool = True
+
+
 class APIResponse(BaseModel):
     success: bool
     message: str
     data: Optional[Any] = None
     errors: List[RuleViolation] = Field(default_factory=list)
+

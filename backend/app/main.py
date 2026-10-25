@@ -13,6 +13,7 @@ from backend.app.rules.profile_loader import load_rule_profile
 from backend.app.services.aircraft_service import AircraftService
 from backend.app.services.constraint_engine import ConstraintEngine
 from backend.app.services.crew_service import CrewService
+from backend.app.services.disruption_service import DisruptionService
 from backend.app.services.index_manager import ADSIndexManager
 from backend.app.services.persistence_service import PersistenceService
 from backend.app.services.positioning_service import PositioningService
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
     scheduler = RosterScheduler(idx_mgr, ce, pos_service, rule_profile)
     crew_svc = CrewService(idx_mgr, persist)
     ac_svc = AircraftService(idx_mgr, persist)
+    disruption_svc = DisruptionService(idx_mgr, ce, pos_service, scheduler, persist, rule_profile)
 
     app.state.persistence_service = persist
     app.state.index_manager = idx_mgr
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI):
     app.state.roster_scheduler = scheduler
     app.state.crew_service = crew_svc
     app.state.aircraft_service = ac_svc
+    app.state.disruption_service = disruption_svc
 
     yield
 

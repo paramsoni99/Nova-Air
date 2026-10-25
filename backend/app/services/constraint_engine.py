@@ -682,9 +682,20 @@ class ConstraintEngine:
                 result.add_violation(v)
 
         # 3. Validate aircraft
-        ac_res = self.validate_aircraft_assignment(aircraft, flight, aircraft_tree, previous_flight)
-        for v in ac_res.violations:
-            result.add_violation(v)
+        if aircraft is not None:
+            ac_res = self.validate_aircraft_assignment(aircraft, flight, aircraft_tree, previous_flight)
+            for v in ac_res.violations:
+                result.add_violation(v)
+        else:
+            result.add_violation(
+                RuleViolation(
+                    rule_id="ACFT-STAT-01",
+                    severity=RuleSeverity.HARD,
+                    message="No aircraft assigned to flight leg",
+                    entity_id=flight.flight_number,
+                    context={"flight_number": flight.flight_number},
+                )
+            )
 
         if result.is_valid:
             result.soft_score = (

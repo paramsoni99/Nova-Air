@@ -380,12 +380,19 @@ class PersistenceService:
         )
 
     def save_flight(self, flight: FlightLeg) -> None:
-        """Insert or replace flight in SQLite database."""
+        """Insert or update flight in SQLite database without cascading deletes."""
         with self.transaction() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO flights (flight_number, origin, destination, departure_utc, arrival_utc, aircraft_tail, required_aircraft_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO flights (flight_number, origin, destination, departure_utc, arrival_utc, aircraft_tail, required_aircraft_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(flight_number) DO UPDATE SET
+                    origin = excluded.origin,
+                    destination = excluded.destination,
+                    departure_utc = excluded.departure_utc,
+                    arrival_utc = excluded.arrival_utc,
+                    aircraft_tail = excluded.aircraft_tail,
+                    required_aircraft_type = excluded.required_aircraft_type;
                 """,
                 (
                     flight.flight_number, flight.origin, flight.destination,
@@ -431,6 +438,36 @@ class PersistenceService:
                     crew.id,
                 ),
             )
+
+    def save_aircraft(self, aircraft: Aircraft) -> None:
+        """Update aircraft status and flight hours in SQLite database."""
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                UPDATE aircraft
+                SET is_active = ?, total_flight_hours = ?
+                WHERE tail_number = ?;
+                """,
+                (1 if aircraft.is_active else 0, aircraft.total_flight_hours, aircraft.tail_number),
+            )
+
+    def get_all_assignments(self) -> Dict[str, RosterAssignment]:
+        """Fetch all assignments from SQLite."""
+        assignments: Dict[str, RosterAssignment] = {}
+        with self.get_connection() as conn:
+            for row in conn.execute("SELECT * FROM roster_assignments;"):
+                cabin_crew = json.loads(row["cabin_crew_ids"]) if row["cabin_crew_ids"] else []
+                asn = RosterAssignment(
+                    id=row["id"],
+                    flight_number=row["flight_number"],
+                    captain_id=row["captain_id"],
+                    first_officer_id=row["first_officer_id"],
+                    cabin_crew_ids=cabin_crew,
+                    aircraft_tail=row["aircraft_tail"],
+                    status=RosterStatus(row["status"]),
+                )
+                assignments[row["flight_number"]] = asn
+        return assignments
 
     def get_flight(self, flight_number: str) -> Optional[FlightLeg]:
         """Fetch single flight from SQLite."""

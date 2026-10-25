@@ -19,6 +19,9 @@ from backend.app.models.domain import (
 from backend.app.models.schemas import (
     ADSLaboratoryQueryRequest,
     APIResponse,
+    DisruptionExecuteRequest,
+    DisruptionExecuteResponse,
+    DisruptionPresetsResponse,
     FlightCreateRequest,
     FlightPatchRequest,
     ManualAssignRequest,
@@ -29,6 +32,7 @@ from backend.app.rules.profile_loader import load_rule_profile
 from backend.app.services.aircraft_service import AircraftService
 from backend.app.services.constraint_engine import ConstraintEngine
 from backend.app.services.crew_service import CrewService
+from backend.app.services.disruption_service import DisruptionService
 from backend.app.services.index_manager import ADSIndexManager
 from backend.app.services.persistence_service import PersistenceService
 from backend.app.services.positioning_service import PositioningService
@@ -63,6 +67,10 @@ def get_crew_service(request: Request) -> CrewService:
 
 def get_aircraft_service(request: Request) -> AircraftService:
     return request.app.state.aircraft_service
+
+
+def get_disruption_service(request: Request) -> DisruptionService:
+    return request.app.state.disruption_service
 
 
 # ------------------------------------------------------------------------------
@@ -512,3 +520,31 @@ async def reset_demo(
         "crew_count": len(idx.crew_by_id),
         "aircraft_count": len(idx.aircraft_by_id),
     }
+
+
+# ------------------------------------------------------------------------------
+# 7. Disruption Recovery Engine (Scenarios A through E)
+# ------------------------------------------------------------------------------
+@api_router.get("/disruptions/presets", tags=["Disruptions"], response_model=DisruptionPresetsResponse)
+def get_disruption_presets(
+    disruption_svc: DisruptionService = Depends(get_disruption_service),
+):
+    """Retrieve operational presets for Disruption Scenarios A through E."""
+    return {"presets": disruption_svc.get_presets()}
+
+
+@api_router.post("/disruptions/execute", tags=["Disruptions"], response_model=DisruptionExecuteResponse)
+async def execute_disruption(
+    req: DisruptionExecuteRequest,
+    disruption_svc: DisruptionService = Depends(get_disruption_service),
+):
+    """Execute a disruption recovery scenario (A through E) and broadcast recovery events."""
+    try:
+        result = disruption_svc.execute_disruption(req.scenario, req.params)
+        await ws_manager.broadcast("DISRUPTION_EXECUTED", result.model_dump())
+        return result
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

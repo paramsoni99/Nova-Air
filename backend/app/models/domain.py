@@ -118,6 +118,9 @@ class CrewMember(BaseModel):
             for q in self.qualifications
         )
 
+    has_qualification = has_valid_rating
+
+
 
 class FlightLeg(BaseModel):
     flight_number: str = Field(..., min_length=3, description="Flight number, e.g. NV-101")

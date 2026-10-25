@@ -210,6 +210,24 @@ class ADSIndexManager:
 
         self.crew_intervals[cid].insert(report_utc, release_utc, duty_id, data)
 
+    def remove_aircraft_reservation(
+        self, aircraft_tail: str, start_utc: int, end_utc: int, flight_number: str
+    ) -> bool:
+        """Remove flight reservation from aircraft's RBIntervalTree."""
+        tail = aircraft_tail.strip().upper()
+        if tail in self.aircraft_intervals:
+            return self.aircraft_intervals[tail].delete(start_utc, end_utc, flight_number)
+        return False
+
+    def remove_crew_duty(
+        self, crew_id: str, report_utc: int, release_utc: int, duty_id: str
+    ) -> bool:
+        """Remove duty interval from crew member's RBIntervalTree."""
+        cid = crew_id.strip().upper()
+        if cid in self.crew_intervals:
+            return self.crew_intervals[cid].delete(report_utc, release_utc, duty_id)
+        return False
+
     def verify_all_invariants(self) -> bool:
         """Verify structural, sorting, and balancing invariants across all five data structures.
 
