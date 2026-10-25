@@ -89,11 +89,13 @@ def test_implemented_modules_exist_on_disk():
 
     # Search for patterns like `path/to/file` <-- IMPLEMENTED
     for line in lines:
+        if "NOT IMPLEMENTED" in line:
+            continue
         if "IMPLEMENTED" in line and "`" in line:
             matches = re.findall(r"`([^`]+)`", line)
             for m in matches:
-                # If it looks like a file path
-                if m.endswith((".py", ".json", ".txt", ".ts", ".tsx", ".md", ".html")) or "/" in m:
+                # If it looks like a valid file path with a file extension
+                if re.search(r"\.[a-zA-Z0-9_-]+$", m):
                     # Skip glob / braced patterns
                     if "{" in m or "*" in m:
                         continue
