@@ -1,0 +1,1 @@
+"""FlightConnectionGraph implementation (Phase F)."""

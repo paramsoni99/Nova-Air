@@ -1,24 +1,30 @@
 # ==========================================
-# AirCrewOps / Nova-Air — .gitignore
+# AirCrewOps / Nova Air — Strict .gitignore
 # ==========================================
 
-# Internal AI context, skill definitions, and Markdown documentation
+# Local-only Markdown documentation (NEVER pushed to remote)
 *.md
+**/*.md
+README.md
+AGENTS.md
+AI_CONTEXT.md
+docs/
+
+# Local-only Agent rules, skills, and prompts (NEVER pushed to remote)
 .agents/
-**/.agents/
+.agents/**
 skills/
 **/skills/
 
-# Python
+# Python environments, bytecode, and virtual environments
+.venv/
+venv/
+ENV/
+env/
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-env/
-venv/
-.venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -35,7 +41,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# Testing & Linting
+# Testing, coverage, and linting caches
 .pytest_cache/
 .coverage
 .coverage.*
@@ -43,29 +49,39 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Node & Frontend
+# Frontend dependencies, build artifacts, and caches
+frontend/node_modules/
 node_modules/
+frontend/dist/
 dist/
 dist-ssr/
-*.local
+.vite/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Databases & Runtime Data
+# Local SQLite databases, journals, and WAL files
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
 data/*.db
 data/*.sqlite3
 
-# Environment variables & secrets
+# Benchmark generated scratch files & results
+benchmarks/generated/
+benchmarks/latest_benchmark_results.json
+
+# Environment variables, secrets, keys, and certificates
 .env
 .env.*
-!.env.example
+*.pem
+*.key
 
-# Operating System & Editors
+# Operating System & IDE artifacts
 .DS_Store
 Thumbs.db
 .vscode/
@@ -73,5 +89,5 @@ Thumbs.db
 *.swp
 *.swo
 
-# IDE / Agent specific artifacts
+# AI agent local brain and temporary IDE metadata
 .gemini/
