@@ -111,3 +111,47 @@ def test_implemented_modules_exist_on_disk():
                             found = True
                             break
                     assert found, f"File '{m}' marked IMPLEMENTED in AI_CONTEXT.md was not found anywhere on disk"
+
+
+def test_implemented_rest_routes_exist_in_fastapi():
+    """Verify every REST route marked IMPLEMENTED in Section 10 of AI_CONTEXT.md exists in app.routes."""
+    ai_context_path = os.path.join(ROOT_DIR, "AI_CONTEXT.md")
+    with open(ai_context_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Extract Section 10 content
+    sec10_match = re.search(r"## 10\. API and Real-Time Contracts(.*?)(?=## 11\.|\Z)", content, re.DOTALL)
+    assert sec10_match, "Section 10 missing in AI_CONTEXT.md"
+    sec10_text = sec10_match.group(1)
+
+    from backend.app.main import app
+
+    def collect_routes(router, prefix=""):
+        res = set()
+        for r in router.routes:
+            if hasattr(r, "original_router") and hasattr(r, "include_context"):
+                nested_pfx = prefix + getattr(r.include_context, "prefix", "")
+                res.update(collect_routes(r.original_router, nested_pfx))
+            else:
+                methods = getattr(r, "methods", set())
+                path = prefix + getattr(r, "path", "")
+                for m in methods:
+                    res.add((m.upper(), path))
+                if not methods and path:
+                    res.add(("WS", path))
+        return res
+
+    app_routes = collect_routes(app)
+
+    # Match lines like: - `GET /api/v1/health`: ... (`IMPLEMENTED (VERIFIED)`)
+    route_pattern = r"`(GET|POST|PATCH|PUT|DELETE|WS)\s+([^`]+)`.*?IMPLEMENTED"
+    matches = re.findall(route_pattern, sec10_text)
+
+    assert len(matches) > 0, "Expected at least one IMPLEMENTED route in Section 10 of AI_CONTEXT.md"
+
+    for method, path in matches:
+        if method == "WS":
+            assert any(r[1] == path for r in app_routes), f"WebSocket route '{path}' from Section 10 not found in app.routes"
+        else:
+            assert (method, path) in app_routes, f"REST route '{method} {path}' marked IMPLEMENTED in Section 10 was not found in app.routes"
+

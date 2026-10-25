@@ -14,7 +14,47 @@ from backend.app.models.domain import (
     PositioningItinerary,
     RosterAssignment,
     RuleViolation,
+    UncoveredReason,
 )
+
+
+class FlightCreateRequest(BaseModel):
+    flight_number: str = Field(..., min_length=3)
+    origin: str = Field(..., min_length=3, max_length=4)
+    destination: str = Field(..., min_length=3, max_length=4)
+    departure_utc: int = Field(..., ge=0)
+    arrival_utc: int = Field(..., ge=0)
+    aircraft_tail: Optional[str] = None
+    required_aircraft_type: str = "A320"
+
+
+class FlightPatchRequest(BaseModel):
+    departure_utc: Optional[int] = Field(default=None, ge=0)
+    arrival_utc: Optional[int] = Field(default=None, ge=0)
+    aircraft_tail: Optional[str] = None
+
+
+class ManualAssignRequest(BaseModel):
+    flight_number: str
+    captain_id: str
+    first_officer_id: str
+    cabin_crew_ids: List[str]
+    aircraft_tail: Optional[str] = None
+
+
+class RosterGenerateRequest(BaseModel):
+    start_utc: Optional[int] = None
+    end_utc: Optional[int] = None
+    prioritize_tight_connections: bool = True
+
+
+class ResetDemoRequest(BaseModel):
+    dataset_profile: str = Field(default="demo", description="'demo' or 'test'")
+
+
+class ADSLaboratoryQueryRequest(BaseModel):
+    structure_type: str = Field(..., description="'btree' | 'interval_tree' | 'graph' | 'hash_table'")
+    query_params: Dict[str, Any] = Field(default_factory=dict)
 
 
 class FlightSearchWindowRequest(BaseModel):
@@ -22,13 +62,6 @@ class FlightSearchWindowRequest(BaseModel):
     end_utc: int = Field(..., ge=0)
     origin: Optional[str] = None
     destination: Optional[str] = None
-
-
-class ScheduleRunRequest(BaseModel):
-    profile_id: str = "nova_air_demo_v1"
-    start_utc: int = Field(..., ge=0)
-    end_utc: int = Field(..., ge=0)
-    prioritize_tight_connections: bool = True
 
 
 class DisruptionDelayRequest(BaseModel):
@@ -40,13 +73,6 @@ class DisruptionDelayRequest(BaseModel):
 class DisruptionCancelRequest(BaseModel):
     flight_number: str
     reason: str = "Weather cancellation"
-
-
-class AssignCrewRequest(BaseModel):
-    flight_number: str
-    captain_id: Optional[str] = None
-    first_officer_id: Optional[str] = None
-    cabin_crew_ids: List[str] = Field(default_factory=list)
 
 
 class APIResponse(BaseModel):

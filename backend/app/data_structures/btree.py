@@ -52,6 +52,11 @@ class FlightScheduleBTree(Generic[T]):
     def is_empty(self) -> bool:
         return self._size == 0
 
+    def clear(self) -> None:
+        """Removes all keys and values from the B-Tree."""
+        self._root = BTreeNode[T](leaf=True)
+        self._size = 0
+
     # -------------------------------------------------------------------------
     # Search
     # -------------------------------------------------------------------------

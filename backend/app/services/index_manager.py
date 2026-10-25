@@ -82,6 +82,15 @@ class ADSIndexManager:
             flight_list = flights or []
             history_list = duty_history or []
 
+        # 0. Reset previous in-memory state
+        self.airports_by_code.clear()
+        self.aircraft_by_id.clear()
+        self.crew_by_id.clear()
+        self.flights_by_id.clear()
+        self.schedule_btree.clear()
+        self.crew_intervals.clear()
+        self.aircraft_intervals.clear()
+
         # 1. Populate Hash Tables
         for ap in airport_list:
             self.airports_by_code.insert(ap.code, ap)
