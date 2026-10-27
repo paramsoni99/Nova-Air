@@ -25,6 +25,7 @@ from backend.app.models.domain import (
     MaintenanceWindow,
     RosterAssignment,
     RosterStatus,
+    UncoveredReason,
 )
 from backend.app.services.dataset_loader import DatasetLoader
 from backend.app.services.index_manager import ADSIndexManager
@@ -144,6 +145,7 @@ class PersistenceService:
                     cabin_crew_ids TEXT,
                     aircraft_tail TEXT,
                     status TEXT NOT NULL,
+                    uncovered_reason TEXT,
                     FOREIGN KEY(flight_number) REFERENCES flights(flight_number) ON DELETE CASCADE
                 );
 
@@ -151,6 +153,14 @@ class PersistenceService:
                 CREATE INDEX IF NOT EXISTS idx_crew_role ON crew_members(role);
                 CREATE INDEX IF NOT EXISTS idx_maint_aircraft ON maintenance_windows(aircraft_tail);
             """)
+
+            # Ensure backward compatibility for existing SQLite databases
+            try:
+                cols = [r["name"] for r in conn.execute("PRAGMA table_info(roster_assignments);").fetchall()]
+                if "uncovered_reason" not in cols:
+                    conn.execute("ALTER TABLE roster_assignments ADD COLUMN uncovered_reason TEXT;")
+            except Exception:
+                pass
 
     def seed_from_csv(
         self,
@@ -403,11 +413,12 @@ class PersistenceService:
 
     def save_assignment(self, assignment: RosterAssignment) -> None:
         """Insert or update roster assignment in SQLite database."""
+        uncov_json = assignment.uncovered_reason.model_dump_json() if assignment.uncovered_reason else None
         with self.transaction() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO roster_assignments (id, flight_number, captain_id, first_officer_id, cabin_crew_ids, aircraft_tail, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT OR REPLACE INTO roster_assignments (id, flight_number, captain_id, first_officer_id, cabin_crew_ids, aircraft_tail, status, uncovered_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     assignment.id,
@@ -417,8 +428,14 @@ class PersistenceService:
                     json.dumps(assignment.cabin_crew_ids),
                     assignment.aircraft_tail,
                     assignment.status.value,
+                    uncov_json,
                 ),
             )
+
+    def clear_assignments(self) -> None:
+        """Remove all roster assignments from SQLite."""
+        with self.transaction() as conn:
+            conn.execute("DELETE FROM roster_assignments;")
 
     def save_crew(self, crew: CrewMember) -> None:
         """Update crew member attributes in SQLite database."""
@@ -457,6 +474,12 @@ class PersistenceService:
         with self.get_connection() as conn:
             for row in conn.execute("SELECT * FROM roster_assignments;"):
                 cabin_crew = json.loads(row["cabin_crew_ids"]) if row["cabin_crew_ids"] else []
+                uncov = None
+                if "uncovered_reason" in row.keys() and row["uncovered_reason"]:
+                    try:
+                        uncov = UncoveredReason.model_validate_json(row["uncovered_reason"])
+                    except Exception:
+                        pass
                 asn = RosterAssignment(
                     id=row["id"],
                     flight_number=row["flight_number"],
@@ -465,6 +488,7 @@ class PersistenceService:
                     cabin_crew_ids=cabin_crew,
                     aircraft_tail=row["aircraft_tail"],
                     status=RosterStatus(row["status"]),
+                    uncovered_reason=uncov,
                 )
                 assignments[row["flight_number"]] = asn
         return assignments
@@ -492,6 +516,12 @@ class PersistenceService:
             if row is None:
                 return None
             cabin_crew = json.loads(row["cabin_crew_ids"]) if row["cabin_crew_ids"] else []
+            uncov = None
+            if "uncovered_reason" in row.keys() and row["uncovered_reason"]:
+                try:
+                    uncov = UncoveredReason.model_validate_json(row["uncovered_reason"])
+                except Exception:
+                    pass
             return RosterAssignment(
                 id=row["id"],
                 flight_number=row["flight_number"],
@@ -500,6 +530,7 @@ class PersistenceService:
                 cabin_crew_ids=cabin_crew,
                 aircraft_tail=row["aircraft_tail"],
                 status=RosterStatus(row["status"]),
+                uncovered_reason=uncov,
             )
 
     def export_to_csv(self, output_dir: Path | str) -> None:

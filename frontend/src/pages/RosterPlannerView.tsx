@@ -282,46 +282,86 @@ export const RosterPlannerView: React.FC<RosterPlannerViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs font-mono">
-              <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-                <div>Primary Cause: <strong className="text-amber-400">{selectedUncoveredFlight.uncovered_reason?.primary_cause || 'All candidates violated hard constraints'}</strong></div>
-                <div className="text-slate-400">{selectedUncoveredFlight.uncovered_reason?.summary || 'No legal aircraft or crew pairing found satisfying fail-closed safety parameters.'}</div>
-              </div>
+            {(() => {
+              const uncov = selectedUncoveredFlight.uncovered_reason;
+              const rawCrewViolations = uncov?.crew_violations;
+              const crewViolationsList: RuleViolation[] = Array.isArray(rawCrewViolations)
+                ? (rawCrewViolations as RuleViolation[])
+                : (Object.values(rawCrewViolations || {}).flat() as RuleViolation[]);
+              const details = uncov?.details || {};
 
-              {/* Aircraft Violations */}
-              {selectedUncoveredFlight.uncovered_reason?.aircraft_violations &&
-                selectedUncoveredFlight.uncovered_reason.aircraft_violations.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-slate-400 font-bold uppercase">Aircraft Hard Rejections:</div>
-                    <div className="max-h-28 overflow-y-auto space-y-1">
-                      {selectedUncoveredFlight.uncovered_reason.aircraft_violations.map((v, i) => (
-                        <div key={i} className="p-1.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
-                          <strong>[{v.rule_id}]</strong> {v.message}
-                        </div>
-                      ))}
+              return (
+                <div className="space-y-3 text-xs font-mono">
+                  <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div>Primary Cause: <strong className="text-amber-400">{uncov?.primary_cause || 'All candidates violated hard constraints'}</strong></div>
+                      {details.required_aircraft_type && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-cyan-300">
+                          {details.required_aircraft_type}
+                        </span>
+                      )}
                     </div>
+                    <div className="text-slate-300">{uncov?.summary || 'No legal aircraft or crew pairing found satisfying fail-closed safety parameters.'}</div>
                   </div>
-                )}
 
-              {/* Crew Violations */}
-              {selectedUncoveredFlight.uncovered_reason?.crew_violations &&
-                selectedUncoveredFlight.uncovered_reason.crew_violations.length > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-slate-400 font-bold uppercase">Crew Hard Rejections:</div>
-                    <div className="max-h-28 overflow-y-auto space-y-1">
-                      {selectedUncoveredFlight.uncovered_reason.crew_violations.map((v, i) => (
-                        <div key={i} className="p-1.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
-                          <strong>[{v.rule_id}]</strong> {v.message} ({v.entity_id})
+                  {/* Complement & Candidate Evaluation Metrics */}
+                  {details.required_captains_count !== undefined && (
+                    <div className="p-2.5 rounded bg-slate-950/80 border border-slate-800 grid grid-cols-3 gap-2 text-center text-[11px]">
+                      <div className="p-1 rounded bg-slate-900 border border-slate-800">
+                        <div className="text-slate-500 text-[10px]">Captains</div>
+                        <div className={`font-bold ${details.eligible_captains_count >= details.required_captains_count ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {details.eligible_captains_count} / {details.required_captains_count}
                         </div>
-                      ))}
+                      </div>
+                      <div className="p-1 rounded bg-slate-900 border border-slate-800">
+                        <div className="text-slate-500 text-[10px]">First Officers</div>
+                        <div className={`font-bold ${details.eligible_first_officers_count >= details.required_first_officers_count ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {details.eligible_first_officers_count} / {details.required_first_officers_count}
+                        </div>
+                      </div>
+                      <div className="p-1 rounded bg-slate-900 border border-slate-800">
+                        <div className="text-slate-500 text-[10px]">Cabin Crew</div>
+                        <div className={`font-bold ${details.eligible_cabin_crew_count >= details.required_cabin_crew_count ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {details.eligible_cabin_crew_count} / {details.required_cabin_crew_count}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-              <div className="pt-2 text-[11px] text-slate-500 font-sans">
-                Academic Invariant: Hard constraints cannot be overridden. Flight remains UNASSIGNED until an eligible aircraft and crew schedule window opens.
-              </div>
-            </div>
+                  {/* Aircraft Violations */}
+                  {uncov?.aircraft_violations && uncov.aircraft_violations.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[11px] text-slate-400 font-bold uppercase">Aircraft Hard Rejections:</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {uncov.aircraft_violations.map((v, i) => (
+                          <div key={i} className="p-1.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
+                            <strong>[{v.rule_id}]</strong> {v.message}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Crew Violations */}
+                  {crewViolationsList.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[11px] text-slate-400 font-bold uppercase">Crew Hard Rejections ({crewViolationsList.length}):</div>
+                      <div className="max-h-36 overflow-y-auto space-y-1">
+                        {crewViolationsList.map((v, i) => (
+                          <div key={i} className="p-1.5 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
+                            <strong>[{v.rule_id}]</strong> {v.message} {v.entity_id ? `(${v.entity_id})` : ''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 text-[11px] text-slate-500 font-sans">
+                    Academic Invariant: Hard constraints cannot be overridden. Flight remains UNASSIGNED until an eligible aircraft and crew schedule window opens.
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="flex justify-end pt-2 border-t border-slate-800">
               <button

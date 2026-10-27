@@ -73,6 +73,50 @@ class RosterScheduler:
         self.constraint_engine: ConstraintEngine = (
             constraint_engine or ConstraintEngine(self.profile, self.positioning_service)
         )
+        self._initial_crew_snapshots: Dict[str, Dict[str, Any]] = {}
+        self.record_baseline_state()
+
+    def record_baseline_state(self) -> None:
+        """Capture baseline crew counters and locations for deterministic scheduling."""
+        self._initial_crew_snapshots.clear()
+        for crew in self.index_manager.crew_by_id.values():
+            self._initial_crew_snapshots[crew.id] = {
+                "current_airport": crew.current_airport,
+                "cumulative_flight_seconds_7d": crew.cumulative_flight_seconds_7d,
+                "cumulative_duty_seconds_7d": crew.cumulative_duty_seconds_7d,
+                "last_duty_end_utc": crew.last_duty_end_utc,
+            }
+
+    def _reset_to_baseline(self) -> None:
+        """Clear previously generated roster intervals and restore baseline crew state."""
+        # 1. Reset aircraft intervals: delete any flight reservations (keep MAINTENANCE)
+        for tail, tree in self.index_manager.aircraft_intervals.items():
+            to_remove = [
+                (node.start_utc, node.end_utc, node.interval_id)
+                for node in tree.inorder_traversal()
+                if isinstance(node.data, dict) and node.data.get("type") == "FLIGHT"
+            ]
+            for s, e, iid in to_remove:
+                tree.delete(s, e, iid)
+
+        # 2. Reset crew intervals: delete generated duties (starting with DUTY-NV-)
+        for cid, tree in self.index_manager.crew_intervals.items():
+            to_remove = [
+                (node.start_utc, node.end_utc, node.interval_id)
+                for node in tree.inorder_traversal()
+                if isinstance(node.data, dict) and str(node.data.get("duty_id", "")).startswith("DUTY-NV-")
+            ]
+            for s, e, iid in to_remove:
+                tree.delete(s, e, iid)
+
+        # 3. Restore crew attributes from baseline snapshots
+        for cid, snap in self._initial_crew_snapshots.items():
+            c = self.index_manager.crew_by_id.get(cid)
+            if c is not None:
+                c.current_airport = snap["current_airport"]
+                c.cumulative_flight_seconds_7d = snap["cumulative_flight_seconds_7d"]
+                c.cumulative_duty_seconds_7d = snap["cumulative_duty_seconds_7d"]
+                c.last_duty_end_utc = snap["last_duty_end_utc"]
 
     def generate_roster(
         self,
@@ -81,6 +125,12 @@ class RosterScheduler:
         prioritize_tight_connections: bool = True,
     ) -> ScheduleResult:
         """Generate constraint-safe roster across planning horizon using all five ADS structures."""
+        # Reset state back to clean baseline so repeated runs are idempotent
+        if not self._initial_crew_snapshots:
+            self.record_baseline_state()
+        else:
+            self._reset_to_baseline()
+
         # Step 1: Range Query on B-Tree for flights in planning horizon
         range_results = self.index_manager.schedule_btree.range_query(
             horizon_start_utc, horizon_end_utc, include_min=True, include_max=True
@@ -166,6 +216,26 @@ class RosterScheduler:
                     primary_cause="NO_FEASIBLE_AIRCRAFT",
                     summary=summary,
                     aircraft_violations=ac_violations,
+                    crew_violations=[],
+                    details={
+                        "flight_id": flight.flight_number,
+                        "departure_utc": flight.departure_utc,
+                        "arrival_utc": flight.arrival_utc,
+                        "origin": flight.origin,
+                        "destination": flight.destination,
+                        "required_aircraft_type": flight.required_aircraft_type,
+                        "evaluated_aircraft_count": len(ac_candidates),
+                        "rejection_rules": list({v.rule_id for v in ac_violations}),
+                        "aircraft_evaluations": [
+                            {
+                                "tail_number": v.entity_id,
+                                "rule_id": v.rule_id,
+                                "message": v.message,
+                                "context": v.context,
+                            }
+                            for v in ac_violations
+                        ],
+                    },
                 )
                 continue
 
@@ -222,11 +292,44 @@ class RosterScheduler:
                     f"FOs {len(eligible_fos)}/{req_fo}, "
                     f"Cabin {len(eligible_cc)}/{req_cc}"
                 )
+                flat_crew_violations: List[RuleViolation] = []
+                for viols in role_violations.values():
+                    flat_crew_violations.extend(viols)
+
                 unassigned[flight.flight_number] = UncoveredReason(
                     flight_number=flight.flight_number,
                     primary_cause="INSUFFICIENT_CREW",
                     summary=summary,
-                    crew_violations=role_violations,
+                    aircraft_violations=[],
+                    crew_violations=flat_crew_violations,
+                    details={
+                        "flight_id": flight.flight_number,
+                        "departure_utc": flight.departure_utc,
+                        "arrival_utc": flight.arrival_utc,
+                        "origin": flight.origin,
+                        "destination": flight.destination,
+                        "required_aircraft_type": req_type,
+                        "selected_aircraft": selected_aircraft.tail_number,
+                        "eligible_captains_count": len(eligible_captains),
+                        "required_captains_count": req_cpt,
+                        "eligible_first_officers_count": len(eligible_fos),
+                        "required_first_officers_count": req_fo,
+                        "eligible_cabin_crew_count": len(eligible_cc),
+                        "required_cabin_crew_count": req_cc,
+                        "rejection_rules": list({v.rule_id for v in flat_crew_violations}),
+                        "role_breakdown": {
+                            role: [
+                                {
+                                    "crew_id": v.entity_id,
+                                    "rule_id": v.rule_id,
+                                    "message": v.message,
+                                    "context": v.context,
+                                }
+                                for v in viols
+                            ]
+                            for role, viols in role_violations.items()
+                        },
+                    },
                 )
                 continue
 
@@ -255,11 +358,29 @@ class RosterScheduler:
             )
 
             if not pair_val.is_valid:
+                flat_pair_violations = pair_val.violations
                 unassigned[flight.flight_number] = UncoveredReason(
                     flight_number=flight.flight_number,
                     primary_cause="PAIRING_REJECTED",
-                    summary="Re-verification of full pairing failed before commit",
-                    crew_violations={"pairing": pair_val.violations},
+                    summary=f"Pairing validation failed: {'; '.join(v.message for v in pair_val.violations)}",
+                    aircraft_violations=[],
+                    crew_violations=flat_pair_violations,
+                    details={
+                        "flight_id": flight.flight_number,
+                        "departure_utc": flight.departure_utc,
+                        "arrival_utc": flight.arrival_utc,
+                        "selected_aircraft": selected_aircraft.tail_number,
+                        "rejection_rules": list({v.rule_id for v in pair_val.violations}),
+                        "violations": [
+                            {
+                                "entity_id": v.entity_id,
+                                "rule_id": v.rule_id,
+                                "message": v.message,
+                                "context": v.context,
+                            }
+                            for v in pair_val.violations
+                        ],
+                    },
                 )
                 continue
 

@@ -372,3 +372,66 @@ def test_flight_patch_delay_minutes_atomic_reschedule(client):
     assert sql_fl.arrival_utc == expected_arr
 
 
+def test_roster_generation_enrichment_and_consecutive_idempotency(client):
+    """Verify regression fix:
+    1. Reset to demo profile with 36 flights.
+    2. First POST /api/v1/roster/generate produces 17 assigned, 19 unassigned.
+    3. GET /api/v1/flights returns enriched assignments with NV-101 is_covered=True, CPT, FO, and cabin crew.
+    4. Second consecutive POST /api/v1/roster/generate is idempotent and also produces 17 assigned, 19 unassigned.
+    5. Unassigned flights have structured UncoveredReason records with details.
+    """
+    # 1. Reset to demo dataset
+    reset_resp = client.post("/api/v1/system/reset-demo", json={"dataset_profile": "demo"})
+    assert reset_resp.status_code == 200
+    assert reset_resp.json()["flight_count"] == 36
+
+    # 2. First Roster Generation
+    gen_resp_1 = client.post("/api/v1/roster/generate", json={})
+    assert gen_resp_1.status_code == 200
+    data_1 = gen_resp_1.json()
+    assert data_1["assigned_count"] == 17
+    assert data_1["unassigned_count"] == 19
+    assert data_1["total_flights"] == 36
+
+    # 3. GET /flights returns enriched assignments
+    flights_resp = client.get("/api/v1/flights")
+    assert flights_resp.status_code == 200
+    flights_data = flights_resp.json()["flights"]
+    assert len(flights_data) == 36
+
+    # Check NV-101 assignment details
+    nv101 = next(f for f in flights_data if f["flight_number"] == "NV-101")
+    assert nv101["is_covered"] is True
+    assert nv101["status"] == "ASSIGNED"
+    assert nv101["captain_id"] == "CRW-CPT-01"
+    assert nv101["first_officer_id"] == "CRW-FO-01"
+    assert nv101["aircraft_tail"] == "VT-NVA"
+    assert len(nv101["cabin_crew_ids"]) == 4
+
+    # Check unassigned flight NV-114
+    nv114 = next(f for f in flights_data if f["flight_number"] == "NV-114")
+    assert nv114["is_covered"] is False
+    assert nv114["status"] == "UNASSIGNED"
+    assert nv114["uncovered_reason"] is not None
+    assert nv114["uncovered_reason"]["primary_cause"] == "NO_FEASIBLE_AIRCRAFT"
+    assert "VT-NVD" in nv114["uncovered_reason"]["summary"]
+
+    # 4. Second Roster Generation (idempotency check)
+    gen_resp_2 = client.post("/api/v1/roster/generate", json={})
+    assert gen_resp_2.status_code == 200
+    data_2 = gen_resp_2.json()
+    assert data_2["assigned_count"] == 17
+    assert data_2["unassigned_count"] == 19
+    assert data_2["total_flights"] == 36
+
+    # Re-verify GET /flights after second generation
+    flights_resp_2 = client.get("/api/v1/flights")
+    assert flights_resp_2.status_code == 200
+    flights_data_2 = flights_resp_2.json()["flights"]
+    assigned_flights = [f for f in flights_data_2 if f["is_covered"]]
+    unassigned_flights = [f for f in flights_data_2 if not f["is_covered"]]
+    assert len(assigned_flights) == 17
+    assert len(unassigned_flights) == 19
+
+
+

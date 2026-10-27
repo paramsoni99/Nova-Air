@@ -6,7 +6,7 @@ Enforces half-open UTC intervals [start_utc, end_utc) and strict validation.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -177,6 +177,7 @@ class RosterAssignment(BaseModel):
     cabin_crew_ids: List[str] = Field(default_factory=list)
     aircraft_tail: Optional[str] = Field(default=None)
     status: RosterStatus = Field(default=RosterStatus.UNASSIGNED)
+    uncovered_reason: Optional[UncoveredReason] = Field(default=None)
 
 
 class PositioningItinerary(BaseModel):
@@ -207,7 +208,7 @@ class UncoveredReason(BaseModel):
     primary_cause: str
     summary: str
     aircraft_violations: List[RuleViolation] = Field(default_factory=list)
-    crew_violations: Dict[str, List[RuleViolation]] = Field(default_factory=dict)
+    crew_violations: Union[List[RuleViolation], Dict[str, List[RuleViolation]]] = Field(default_factory=list)
     details: Dict[str, Any] = Field(default_factory=dict)
 
 

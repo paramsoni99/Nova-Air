@@ -172,6 +172,7 @@ def list_flights(
     destination: Optional[str] = Query(None),
     aircraft_tail: Optional[str] = Query(None),
     idx: ADSIndexManager = Depends(get_index_manager),
+    persist: PersistenceService = Depends(get_persistence_service),
 ):
     """Retrieve flights with optional B-Tree departure time-window range query."""
     b_tree_query_executed = False
@@ -201,6 +202,41 @@ def list_flights(
             continue
         filtered.append(fl)
 
+    # Enrich flights with current roster assignments and audit reasons from persistence
+    assignments = persist.get_all_assignments()
+    enriched = []
+    for fl in filtered:
+        asn = assignments.get(fl.flight_number)
+        is_cov = (
+            asn is not None
+            and asn.status == RosterStatus.ASSIGNED
+            and bool(asn.captain_id)
+            and bool(asn.first_officer_id)
+        )
+        fl_dict = fl.model_dump()
+        fl_dict["aircraft_type"] = fl.required_aircraft_type
+        fl_dict["effective_departure_utc"] = fl.departure_utc
+        fl_dict["effective_arrival_utc"] = fl.arrival_utc
+        fl_dict["delay_minutes"] = 0
+        if asn is not None:
+            fl_dict["captain_id"] = asn.captain_id
+            fl_dict["first_officer_id"] = asn.first_officer_id
+            fl_dict["cabin_crew_ids"] = asn.cabin_crew_ids
+            fl_dict["aircraft_tail"] = asn.aircraft_tail or fl.aircraft_tail
+            fl_dict["status"] = asn.status.value
+            fl_dict["is_covered"] = is_cov
+            fl_dict["uncovered_reason"] = (
+                asn.uncovered_reason.model_dump() if asn.uncovered_reason else None
+            )
+        else:
+            fl_dict["captain_id"] = None
+            fl_dict["first_officer_id"] = None
+            fl_dict["cabin_crew_ids"] = []
+            fl_dict["status"] = "UNASSIGNED"
+            fl_dict["is_covered"] = False
+            fl_dict["uncovered_reason"] = None
+        enriched.append(fl_dict)
+
     telemetry = {
         "range_query_executed": b_tree_query_executed,
         "query_duration_us": query_duration_us,
@@ -209,8 +245,8 @@ def list_flights(
     }
 
     return {
-        "flights": filtered,
-        "count": len(filtered),
+        "flights": enriched,
+        "count": len(enriched),
         "b_tree_telemetry": telemetry,
         "btree_range_telemetry": telemetry,
     }
@@ -345,6 +381,10 @@ async def generate_roster(
     persist: PersistenceService = Depends(get_persistence_service),
 ):
     """Execute priority-driven roster generation across planning horizon."""
+    # 1. Clear old assignments and rebuild clean in-memory ADS indexes from SQLite
+    persist.clear_assignments()
+    persist.rebuild_indexes_from_db(idx)
+
     all_flights = list(idx.flights_by_id.values())
     if not all_flights:
         return {"message": "No flights available to schedule"}
@@ -356,8 +396,22 @@ async def generate_roster(
 
     result = scheduler.generate_roster(min_dep, max_arr, req.prioritize_tight_connections)
 
-    # Persist generated assignments to SQLite
+    # 2. Persist generated assignments to SQLite (both ASSIGNED and UNASSIGNED)
     for asn in result.assignments.values():
+        persist.save_assignment(asn)
+
+    for flight_num, uncov in result.unassigned_flights.items():
+        fl = idx.flights_by_id.get(flight_num)
+        asn = RosterAssignment(
+            id=f"ASN-{flight_num}",
+            flight_number=flight_num,
+            captain_id=None,
+            first_officer_id=None,
+            cabin_crew_ids=[],
+            aircraft_tail=fl.aircraft_tail if fl else None,
+            status=RosterStatus.UNASSIGNED,
+            uncovered_reason=uncov,
+        )
         persist.save_assignment(asn)
 
     await ws_manager.broadcast("ROSTER_GENERATED", {
